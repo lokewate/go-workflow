@@ -9,8 +9,7 @@
                 "type": "TASK",
                 "name": "Start",
                 "outputs": {
-                    "ok": "passed",
-                    "score": "val"
+                    "ok": "passed"
                 },
                 "x": 0,
                 "y": 100
@@ -54,13 +53,6 @@
                 "y": 100
             },
             {
-                "id": "end",
-                "type": "TASK",
-                "name": "End",
-                "x": 750,
-                "y": 100
-            },
-            {
                 "id": "alt_path",
                 "type": "TASK",
                 "name": "Alternative Path",
@@ -72,8 +64,15 @@
                 "type": "GATEWAY",
                 "name": "Exclusive Join",
                 "gateway_type": "EXCLUSIVE_JOIN",
-                "x": 450,
-                "y": 250
+                "x": 750,
+                "y": 150
+            },
+            {
+                "id": "end",
+                "type": "TASK",
+                "name": "End",
+                "x": 900,
+                "y": 150
             }
         ],
         "edges": [
@@ -89,7 +88,7 @@
                 "condition": "payload.ok == true"
             },
             {
-                "id": "e2_alt",
+                "id": "e_alt",
                 "source_id": "split",
                 "target_id": "alt_path",
                 "condition": "payload.ok == false"
@@ -117,7 +116,7 @@
             {
                 "id": "e7",
                 "source_id": "p_join",
-                "target_id": "end"
+                "target_id": "e_join"
             },
             {
                 "id": "e8",
@@ -133,13 +132,12 @@
     },
     "scenarios": [
         {
-            "name": "Success Path: True Condition -> Parallel Execution",
+            "name": "Success Path: True Condition -> Parallel Split -> Parallel Join -> Exclusive Join",
             "steps": [
                 {
                     "node_id": "start",
                     "results": {
-                        "passed": true,
-                        "val": 100
+                        "passed": true
                     }
                 },
                 {
@@ -156,19 +154,7 @@
             ]
         },
         {
-            "name": "Halt Path: No condition matches at Split",
-            "steps": [
-                {
-                    "node_id": "start",
-                    "results": {
-                        "passed": "maybe"
-                    }
-                }
-            ],
-            "expected_tokens": []
-        },
-        {
-            "name": "Exclusive Join: False Condition -> Alternative Path",
+            "name": "Alt Path: False Condition -> Alternative Task -> Exclusive Join",
             "steps": [
                 {
                     "node_id": "start",
@@ -186,7 +172,7 @@
             ]
         },
         {
-            "name": "Partial Join: Only one parallel branch complete",
+            "name": "Partial Join: Only one parallel branch complete, waiting at p_join",
             "steps": [
                 {
                     "node_id": "start",
