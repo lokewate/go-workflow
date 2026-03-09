@@ -1,0 +1,96 @@
+{
+    "blueprint": {
+        "id": "test_flow",
+        "nodes": {
+            "start": {
+                "id": "start",
+                "type": "TASK",
+                "outputs": {
+                    "ok": "passed"
+                }
+            },
+            "split": {
+                "id": "split",
+                "type": "GATEWAY",
+                "gateway_type": "EXCLUSIVE_SPLIT"
+            },
+            "p_split": {
+                "id": "p_split",
+                "type": "GATEWAY",
+                "gateway_type": "PARALLEL_SPLIT"
+            },
+            "t1": {
+                "id": "t1",
+                "type": "TASK"
+            },
+            "t2": {
+                "id": "t2",
+                "type": "TASK"
+            },
+            "p_join": {
+                "id": "p_join",
+                "type": "GATEWAY",
+                "gateway_type": "PARALLEL_JOIN"
+            },
+            "end": {
+                "id": "end",
+                "type": "TASK"
+            }
+        },
+        "edges": [
+            {
+                "source_id": "start",
+                "target_id": "split"
+            },
+            {
+                "source_id": "split",
+                "target_id": "p_split",
+                "condition": "payload.ok == true"
+            },
+            {
+                "source_id": "p_split",
+                "target_id": "t1"
+            },
+            {
+                "source_id": "p_split",
+                "target_id": "t2"
+            },
+            {
+                "source_id": "t1",
+                "target_id": "p_join"
+            },
+            {
+                "source_id": "t2",
+                "target_id": "p_join"
+            },
+            {
+                "source_id": "p_join",
+                "target_id": "end"
+            }
+        ]
+    },
+    "scenarios": [
+        {
+            "name": "Full Parallel Path",
+            "steps": [
+                {
+                    "node_id": "start",
+                    "results": {
+                        "passed": true
+                    }
+                },
+                {
+                    "node_id": "t1",
+                    "results": {}
+                },
+                {
+                    "node_id": "t2",
+                    "results": {}
+                }
+            ],
+            "expected_tokens": [
+                "end"
+            ]
+        }
+    ]
+}
