@@ -19,8 +19,12 @@ const (
 type Node struct {
 	ID          string            `json:"id"`
 	Type        NodeType          `json:"type"`
+	Name        string            `json:"name"`
+	TaskType    string            `json:"task_type,omitempty"`
 	GatewayType GatewayType       `json:"gateway_type,omitempty"`
-	Outputs     map[string]string `json:"outputs,omitempty"` // GlobalKey: LocalResultKey
+	Outputs     map[string]string `json:"outputs,omitempty"`
+	X           int               `json:"x"`
+	Y           int               `json:"y"`
 }
 
 type Edge struct {
@@ -31,9 +35,11 @@ type Edge struct {
 }
 
 type Blueprint struct {
-	ID    string          `json:"id"`
-	Nodes map[string]Node `json:"nodes"`
-	Edges []Edge          `json:"edges"`
+	ID      string `json:"workflow_id"`
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+	Nodes   []Node `json:"nodes"`
+	Edges   []Edge `json:"edges"`
 }
 
 type TokenStatus string

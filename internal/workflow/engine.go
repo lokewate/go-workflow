@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/google/uuid"
@@ -12,6 +13,16 @@ type Engine struct {
 	Blueprint *Blueprint
 }
 
+// Helper to find node by ID in the slice
+func (e *Engine) getNode(id string) (Node, bool) {
+	for _, n := range e.Blueprint.Nodes {
+		if n.ID == id {
+			return n, true
+		}
+	}
+	return Node{}, false
+}
+
 func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, results map[string]interface{}) error {
 	log.Printf("[Engine] CompleteTask: instID=%s, nodeID=%s", instID, nodeID)
 	inst, err := e.Repo.Get(ctx, instID)
@@ -20,10 +31,10 @@ func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, result
 		return err
 	}
 
-	node, ok := e.Blueprint.Nodes[nodeID]
+	node, ok := e.getNode(nodeID)
 	if !ok {
 		log.Printf("[Engine] CompleteTask: node %s not found in blueprint", nodeID)
-		return nil
+		return fmt.Errorf("node %s not found", nodeID)
 	}
 	log.Printf("[Engine] CompleteTask: processing output mappings for node %s", nodeID)
 	if inst.Payload == nil {
@@ -46,7 +57,7 @@ func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, result
 
 func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string) error {
 	log.Printf("[Engine] transition: sourceID=%s", sourceID)
-	sourceNode, ok := e.Blueprint.Nodes[sourceID]
+	sourceNode, ok := e.getNode(sourceID)
 	if !ok {
 		log.Printf("[Engine] transition: source node %s not found", sourceID)
 		return nil
@@ -83,7 +94,7 @@ func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string
 
 func (e *Engine) processTarget(ctx context.Context, inst *Instance, nodeID string) error {
 	log.Printf("[Engine] processTarget: nodeID=%s", nodeID)
-	node, ok := e.Blueprint.Nodes[nodeID]
+	node, ok := e.getNode(nodeID)
 	if !ok {
 		log.Printf("[Engine] processTarget: node %s not found", nodeID)
 		return nil

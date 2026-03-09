@@ -1,69 +1,99 @@
 {
-    "blueprint": {
-        "id": "test_flow",
-        "nodes": {
-            "start": {
+    "workflow": {
+        "workflow_id": "test_flow",
+        "name": "Test Flow",
+        "version": 1,
+        "nodes": [
+            {
                 "id": "start",
                 "type": "TASK",
+                "name": "Start",
                 "outputs": {
                     "ok": "passed"
-                }
+                },
+                "x": 0,
+                "y": 100
             },
-            "split": {
+            {
                 "id": "split",
                 "type": "GATEWAY",
-                "gateway_type": "EXCLUSIVE_SPLIT"
+                "name": "Split",
+                "gateway_type": "EXCLUSIVE_SPLIT",
+                "x": 150,
+                "y": 100
             },
-            "p_split": {
+            {
                 "id": "p_split",
                 "type": "GATEWAY",
-                "gateway_type": "PARALLEL_SPLIT"
+                "name": "Parallel Split",
+                "gateway_type": "PARALLEL_SPLIT",
+                "x": 300,
+                "y": 100
             },
-            "t1": {
+            {
                 "id": "t1",
-                "type": "TASK"
+                "type": "TASK",
+                "name": "Task 1",
+                "x": 450,
+                "y": 50
             },
-            "t2": {
+            {
                 "id": "t2",
-                "type": "TASK"
+                "type": "TASK",
+                "name": "Task 2",
+                "x": 450,
+                "y": 150
             },
-            "p_join": {
+            {
                 "id": "p_join",
                 "type": "GATEWAY",
-                "gateway_type": "PARALLEL_JOIN"
+                "name": "Parallel Join",
+                "gateway_type": "PARALLEL_JOIN",
+                "x": 600,
+                "y": 100
             },
-            "end": {
+            {
                 "id": "end",
-                "type": "TASK"
+                "type": "TASK",
+                "name": "End",
+                "x": 750,
+                "y": 100
             }
-        },
+        ],
         "edges": [
             {
+                "id": "e1",
                 "source_id": "start",
                 "target_id": "split"
             },
             {
+                "id": "e2",
                 "source_id": "split",
                 "target_id": "p_split",
                 "condition": "payload.ok == true"
             },
             {
+                "id": "e3",
                 "source_id": "p_split",
                 "target_id": "t1"
             },
             {
+                "id": "e4",
                 "source_id": "p_split",
                 "target_id": "t2"
             },
             {
+                "id": "e5",
                 "source_id": "t1",
                 "target_id": "p_join"
             },
             {
+                "id": "e6",
                 "source_id": "t2",
                 "target_id": "p_join"
             },
             {
+                "id": "e7",
                 "source_id": "p_join",
                 "target_id": "end"
             }
@@ -71,7 +101,7 @@
     },
     "scenarios": [
         {
-            "name": "Full Parallel Path",
+            "name": "Success Path: True Condition -> Parallel Execution",
             "steps": [
                 {
                     "node_id": "start",
@@ -91,6 +121,18 @@
             "expected_tokens": [
                 "end"
             ]
+        },
+        {
+            "name": "Halt Path: False Condition stops flow at Split",
+            "steps": [
+                {
+                    "node_id": "start",
+                    "results": {
+                        "passed": false
+                    }
+                }
+            ],
+            "expected_tokens": []
         }
     ]
 }

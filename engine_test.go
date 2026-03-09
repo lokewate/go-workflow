@@ -10,46 +10,59 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type Suite struct {
-	Blueprint workflow.Blueprint `json:"blueprint"`
-	Scenarios []struct {
-		Name  string `json:"name"`
-		Steps []struct {
-			NodeID  string                 `json:"node_id"`
-			Results map[string]interface{} `json:"results"`
-		} `json:"steps"`
-		ExpectedTokens []string `json:"expected_tokens"`
-	} `json:"scenarios"`
+type TestFile struct {
+	Workflow  workflow.Blueprint `json:"workflow"`
+	Scenarios []TestScenario     `json:"scenarios"`
 }
 
-func TestE2E(t *testing.T) {
-	data, _ := os.ReadFile("test_suite.json")
-	var suite Suite
-	json.Unmarshal(data, &suite)
+type TestScenario struct {
+	Name  string `json:"name"`
+	Steps []struct {
+		NodeID  string                 `json:"node_id"`
+		Results map[string]interface{} `json:"results"`
+	} `json:"steps"`
+	ExpectedTokens []string `json:"expected_tokens"`
+}
 
-	for _, s := range suite.Scenarios {
-		t.Run(s.Name, func(t *testing.T) {
-			repo := workflow.NewMemoryRepo()
-			eng := &workflow.Engine{Repo: repo, Blueprint: &suite.Blueprint}
+func TestWorkflows(t *testing.T) {
+	content, err := os.ReadFile("test_suite.json")
+	assert.NoError(t, err)
+
+	var testFile TestFile
+	err = json.Unmarshal(content, &testFile)
+	assert.NoError(t, err)
+
+	for _, scenario := range testFile.Scenarios {
+		t.Run(scenario.Name, func(t *testing.T) {
 			ctx := context.Background()
+			repo := workflow.NewMemoryRepo()
+			engine := &workflow.Engine{
+				Repo:      repo,
+				Blueprint: &testFile.Workflow,
+			}
 
-			inst := &workflow.Instance{
-				ID:      "1",
-				Tokens:  []workflow.Token{{NodeID: "start"}},
+			// Initialize instance at the 'start' node
+			instID := "test-instance"
+			repo.Save(ctx, &workflow.Instance{
+				ID:      instID,
 				Payload: make(map[string]interface{}),
-			}
-			repo.Save(ctx, inst)
+				Tokens:  []workflow.Token{{NodeID: "start", Status: workflow.TokenActive}},
+			})
 
-			for _, step := range s.Steps {
-				eng.CompleteTask(ctx, "1", step.NodeID, step.Results)
+			// Run steps
+			for _, step := range scenario.Steps {
+				err := engine.CompleteTask(ctx, instID, step.NodeID, step.Results)
+				assert.NoError(t, err)
 			}
 
-			final, _ := repo.Get(ctx, "1")
-			var ids []string
-			for _, tok := range final.Tokens {
-				ids = append(ids, tok.NodeID)
+			// Assert final state
+			finalInst, _ := repo.Get(ctx, instID)
+			var activeTokenNodes []string
+			for _, tok := range finalInst.Tokens {
+				activeTokenNodes = append(activeTokenNodes, tok.NodeID)
 			}
-			assert.ElementsMatch(t, s.ExpectedTokens, ids)
+
+			assert.ElementsMatch(t, scenario.ExpectedTokens, activeTokenNodes)
 		})
 	}
 }
