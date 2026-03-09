@@ -16,12 +16,15 @@ type TestFile struct {
 }
 
 type TestScenario struct {
-	Name  string `json:"name"`
-	Steps []struct {
-		NodeID  string                 `json:"node_id"`
-		Results map[string]interface{} `json:"results"`
-	} `json:"steps"`
-	ExpectedTokens []string `json:"expected_tokens"`
+	Name            string                 `json:"name"`
+	Steps           []TestStep             `json:"steps"`
+	ExpectedTokens  []string               `json:"expected_tokens"`
+	ExpectedPayload map[string]interface{} `json:"expected_payload"`
+}
+
+type TestStep struct {
+	NodeID  string                 `json:"node_id"`
+	Results map[string]interface{} `json:"results"`
 }
 
 func TestWorkflows(t *testing.T) {
@@ -41,28 +44,34 @@ func TestWorkflows(t *testing.T) {
 				Blueprint: &testFile.Workflow,
 			}
 
-			// Initialize instance at the 'start' node
+			// All scenarios start with a token on the 'start' node
 			instID := "test-instance"
 			repo.Save(ctx, &workflow.Instance{
 				ID:      instID,
 				Payload: make(map[string]interface{}),
-				Tokens:  []workflow.Token{{NodeID: "start", Status: workflow.TokenActive}},
+				Tokens:  []workflow.Token{{ID: "init-token", NodeID: "start", Status: workflow.TokenActive}},
 			})
 
-			// Run steps
+			// Execute mock task completions defined in JSON
 			for _, step := range scenario.Steps {
 				err := engine.CompleteTask(ctx, instID, step.NodeID, step.Results)
-				assert.NoError(t, err)
+				assert.NoError(t, err, "Failed completing step: %s", step.NodeID)
 			}
 
-			// Assert final state
+			// Verify final state
 			finalInst, _ := repo.Get(ctx, instID)
-			var activeTokenNodes []string
-			for _, tok := range finalInst.Tokens {
-				activeTokenNodes = append(activeTokenNodes, tok.NodeID)
-			}
 
-			assert.ElementsMatch(t, scenario.ExpectedTokens, activeTokenNodes)
+			// 1. Check Tokens
+			var actualTokenNodes []string
+			for _, tok := range finalInst.Tokens {
+				actualTokenNodes = append(actualTokenNodes, tok.NodeID)
+			}
+			assert.ElementsMatch(t, scenario.ExpectedTokens, actualTokenNodes, "Tokens do not match expected end state")
+
+			// 2. Check Payload mutations
+			for key, expectedValue := range scenario.ExpectedPayload {
+				assert.Equal(t, expectedValue, finalInst.Payload[key], "Payload mismatch for key: %s", key)
+			}
 		})
 	}
 }

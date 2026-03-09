@@ -1,7 +1,7 @@
 {
     "workflow": {
-        "workflow_id": "test_flow",
-        "name": "Test Flow",
+        "workflow_id": "corrected_test_flow",
+        "name": "Corrected Test Flow",
         "version": 1,
         "nodes": [
             {
@@ -11,53 +11,60 @@
                 "outputs": {
                     "ok": "passed"
                 },
-                "x": 0,
-                "y": 100
+                "x": 50,
+                "y": 170
             },
             {
                 "id": "split",
                 "type": "GATEWAY",
-                "name": "Split",
+                "name": "Check OK?",
                 "gateway_type": "EXCLUSIVE_SPLIT",
-                "x": 150,
-                "y": 100
+                "x": 430,
+                "y": 170
+            },
+            {
+                "id": "rejected",
+                "type": "TASK",
+                "name": "Rejected State",
+                "x": 699,
+                "y": 21
             },
             {
                 "id": "p_split",
                 "type": "GATEWAY",
                 "name": "Parallel Split",
                 "gateway_type": "PARALLEL_SPLIT",
-                "x": 300,
-                "y": 100
+                "x": 810,
+                "y": 290
             },
             {
                 "id": "t1",
                 "type": "TASK",
                 "name": "Task 1",
-                "x": 450,
+                "x": 1190,
                 "y": 50
             },
             {
                 "id": "t2",
                 "type": "TASK",
                 "name": "Task 2",
-                "x": 450,
-                "y": 150
+                "x": 1189,
+                "y": 290
             },
             {
                 "id": "p_join",
                 "type": "GATEWAY",
                 "name": "Parallel Join",
                 "gateway_type": "PARALLEL_JOIN",
-                "x": 600,
-                "y": 100
+                "x": 1570,
+                "y": 170
             },
             {
                 "id": "end",
                 "type": "TASK",
                 "name": "End",
-                "x": 750,
-                "y": 100
+                "x": 1950,
+                "y": 170
             }
         ],
         "edges": [
@@ -67,10 +74,16 @@
                 "target_id": "split"
             },
             {
-                "id": "e2",
+                "id": "e2_success",
                 "source_id": "split",
                 "target_id": "p_split",
                 "condition": "payload.ok == true"
+            },
+            {
+                "id": "e2_fail",
+                "source_id": "split",
+                "target_id": "rejected",
+                "condition": "payload.ok == false"
             },
             {
                 "id": "e3",
@@ -101,7 +114,7 @@
     },
     "scenarios": [
         {
-            "name": "Success Path: True Condition -> Parallel Execution",
+            "name": "Scenario: Successful Approval and Parallel Join",
             "steps": [
                 {
                     "node_id": "start",
@@ -120,10 +133,13 @@
             ],
             "expected_tokens": [
                 "end"
-            ]
+            ],
+            "expected_payload": {
+                "ok": true
+            }
         },
         {
-            "name": "Halt Path: False Condition stops flow at Split",
+            "name": "Scenario: Rejection Path (No Limbo)",
             "steps": [
                 {
                     "node_id": "start",
@@ -132,7 +148,12 @@
                     }
                 }
             ],
-            "expected_tokens": []
+            "expected_tokens": [
+                "rejected"
+            ],
+            "expected_payload": {
+                "ok": false
+            }
         }
     ]
 }
