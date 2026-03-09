@@ -1,7 +1,7 @@
 {
     "workflow": {
-        "workflow_id": "corrected_test_flow",
-        "name": "Corrected Test Flow",
+        "workflow_id": "test_flow",
+        "name": "Test Flow",
         "version": 1,
         "nodes": [
             {
@@ -9,62 +9,71 @@
                 "type": "TASK",
                 "name": "Start",
                 "outputs": {
-                    "ok": "passed"
+                    "ok": "passed",
+                    "score": "val"
                 },
-                "x": 50,
-                "y": 170
+                "x": 0,
+                "y": 100
             },
             {
                 "id": "split",
                 "type": "GATEWAY",
-                "name": "Check OK?",
+                "name": "Split",
                 "gateway_type": "EXCLUSIVE_SPLIT",
-                "x": 430,
-                "y": 170
-            },
-            {
-                "id": "rejected",
-                "type": "TASK",
-                "name": "Rejected State",
-                "x": 699,
-                "y": 21
+                "x": 150,
+                "y": 100
             },
             {
                 "id": "p_split",
                 "type": "GATEWAY",
                 "name": "Parallel Split",
                 "gateway_type": "PARALLEL_SPLIT",
-                "x": 810,
-                "y": 290
+                "x": 300,
+                "y": 100
             },
             {
                 "id": "t1",
                 "type": "TASK",
                 "name": "Task 1",
-                "x": 1190,
+                "x": 450,
                 "y": 50
             },
             {
                 "id": "t2",
                 "type": "TASK",
                 "name": "Task 2",
-                "x": 1189,
-                "y": 290
+                "x": 450,
+                "y": 150
             },
             {
                 "id": "p_join",
                 "type": "GATEWAY",
                 "name": "Parallel Join",
                 "gateway_type": "PARALLEL_JOIN",
-                "x": 1570,
-                "y": 170
+                "x": 600,
+                "y": 100
             },
             {
                 "id": "end",
                 "type": "TASK",
                 "name": "End",
-                "x": 1950,
-                "y": 170
+                "x": 750,
+                "y": 100
+            },
+            {
+                "id": "alt_path",
+                "type": "TASK",
+                "name": "Alternative Path",
+                "x": 300,
+                "y": 250
+            },
+            {
+                "id": "e_join",
+                "type": "GATEWAY",
+                "name": "Exclusive Join",
+                "gateway_type": "EXCLUSIVE_JOIN",
+                "x": 450,
+                "y": 250
             }
         ],
         "edges": [
@@ -74,15 +83,15 @@
                 "target_id": "split"
             },
             {
-                "id": "e2_success",
+                "id": "e2",
                 "source_id": "split",
                 "target_id": "p_split",
                 "condition": "payload.ok == true"
             },
             {
-                "id": "e2_fail",
+                "id": "e2_alt",
                 "source_id": "split",
-                "target_id": "rejected",
+                "target_id": "alt_path",
                 "condition": "payload.ok == false"
             },
             {
@@ -109,17 +118,28 @@
                 "id": "e7",
                 "source_id": "p_join",
                 "target_id": "end"
+            },
+            {
+                "id": "e8",
+                "source_id": "alt_path",
+                "target_id": "e_join"
+            },
+            {
+                "id": "e9",
+                "source_id": "e_join",
+                "target_id": "end"
             }
         ]
     },
     "scenarios": [
         {
-            "name": "Scenario: Successful Approval and Parallel Join",
+            "name": "Success Path: True Condition -> Parallel Execution",
             "steps": [
                 {
                     "node_id": "start",
                     "results": {
-                        "passed": true
+                        "passed": true,
+                        "val": 100
                     }
                 },
                 {
@@ -133,27 +153,56 @@
             ],
             "expected_tokens": [
                 "end"
-            ],
-            "expected_payload": {
-                "ok": true
-            }
+            ]
         },
         {
-            "name": "Scenario: Rejection Path (No Limbo)",
+            "name": "Halt Path: No condition matches at Split",
+            "steps": [
+                {
+                    "node_id": "start",
+                    "results": {
+                        "passed": "maybe"
+                    }
+                }
+            ],
+            "expected_tokens": []
+        },
+        {
+            "name": "Exclusive Join: False Condition -> Alternative Path",
             "steps": [
                 {
                     "node_id": "start",
                     "results": {
                         "passed": false
                     }
+                },
+                {
+                    "node_id": "alt_path",
+                    "results": {}
                 }
             ],
             "expected_tokens": [
-                "rejected"
+                "end"
+            ]
+        },
+        {
+            "name": "Partial Join: Only one parallel branch complete",
+            "steps": [
+                {
+                    "node_id": "start",
+                    "results": {
+                        "passed": true
+                    }
+                },
+                {
+                    "node_id": "t1",
+                    "results": {}
+                }
             ],
-            "expected_payload": {
-                "ok": false
-            }
+            "expected_tokens": [
+                "t2",
+                "p_join"
+            ]
         }
     ]
 }
