@@ -36,8 +36,6 @@ type GlobalContext interface {
 	GetTokens() []Token
 	// SetTokens updates the tokens in the context and triggers an implicit save.
 	SetTokens(tokens []Token)
-	// Data returns all dynamic state as a map (e.g. for evaluation).
-	Data() map[string]interface{}
 }
 
 // MapContext is an in-memory implementation of GlobalContext using a map.
@@ -123,13 +121,4 @@ func (m *MapContext) triggerSave() {
 	}
 }
 
-// Data returns all data from the context as a map.
-func (m *MapContext) Data() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	res := make(map[string]interface{})
-	for k, v := range m.data {
-		res[k] = v
-	}
-	return res
-}
+// (Removed Data method)

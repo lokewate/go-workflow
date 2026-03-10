@@ -159,7 +159,6 @@ func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []context.T
 
 // removeTokensAt deletes all tokens from the instance that are currently at the specified node.
 func (e *Engine) removeTokensAt(inst *WorkflowInstance, nodeID string) {
-	log.Printf("DEBUG: removing tokens at node %s", nodeID)
 	var next []context.Token
 	for _, t := range inst.Context.GetTokens() {
 		if t.NodeID != nodeID {

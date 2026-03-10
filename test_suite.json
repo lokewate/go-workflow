@@ -85,13 +85,13 @@
                 "id": "e2",
                 "source_id": "split",
                 "target_id": "p_split",
-                "condition": "payload.ok == true"
+                "condition": "ok == true"
             },
             {
                 "id": "e_alt",
                 "source_id": "split",
                 "target_id": "alt_path",
-                "condition": "payload.ok == false"
+                "condition": "ok == false"
             },
             {
                 "id": "e3",
