@@ -1,62 +1,70 @@
 {
     "workflow": {
-        "workflow_id": "test_flow",
-        "name": "Test Flow",
-        "version": 1,
+        "workflow_id": "test_flow_v2",
+        "name": "Engine Verification Flow",
+        "version": 2,
         "nodes": [
             {
                 "id": "start",
-                "type": "TASK",
-                "name": "Start",
-                "outputs": {
-                    "ok": "passed"
-                },
+                "type": "EVENT",
+                "event_type": "START",
+                "name": "Start Process",
                 "x": 0,
-                "y": 100
+                "y": 150
+            },
+            {
+                "id": "task_init",
+                "type": "TASK",
+                "name": "Initialize Payload",
+                "outputs": {
+                    "ok": "ok"
+                },
+                "x": 150,
+                "y": 150
             },
             {
                 "id": "split",
                 "type": "GATEWAY",
-                "name": "Split",
+                "name": "Evaluation Gateway",
                 "gateway_type": "EXCLUSIVE_SPLIT",
-                "x": 150,
-                "y": 100
+                "x": 300,
+                "y": 150
             },
             {
                 "id": "p_split",
                 "type": "GATEWAY",
                 "name": "Parallel Split",
                 "gateway_type": "PARALLEL_SPLIT",
-                "x": 300,
-                "y": 100
-            },
-            {
-                "id": "t1",
-                "type": "TASK",
-                "name": "Task 1",
                 "x": 450,
                 "y": 50
             },
             {
+                "id": "t1",
+                "type": "TASK",
+                "name": "Parallel Task 1",
+                "x": 600,
+                "y": 0
+            },
+            {
                 "id": "t2",
                 "type": "TASK",
-                "name": "Task 2",
-                "x": 450,
-                "y": 150
+                "name": "Parallel Task 2",
+                "x": 600,
+                "y": 100
             },
             {
                 "id": "p_join",
                 "type": "GATEWAY",
                 "name": "Parallel Join",
                 "gateway_type": "PARALLEL_JOIN",
-                "x": 600,
-                "y": 100
+                "x": 750,
+                "y": 50
             },
             {
                 "id": "alt_path",
                 "type": "TASK",
                 "name": "Alternative Path",
-                "x": 300,
+                "x": 450,
                 "y": 250
             },
             {
@@ -64,67 +72,73 @@
                 "type": "GATEWAY",
                 "name": "Exclusive Join",
                 "gateway_type": "EXCLUSIVE_JOIN",
-                "x": 750,
+                "x": 900,
                 "y": 150
             },
             {
                 "id": "end",
-                "type": "TASK",
-                "name": "End",
-                "x": 900,
+                "type": "EVENT",
+                "event_type": "END",
+                "name": "End Process",
+                "x": 1050,
                 "y": 150
             }
         ],
         "edges": [
             {
-                "id": "e1",
+                "id": "e_start",
                 "source_id": "start",
+                "target_id": "task_init"
+            },
+            {
+                "id": "e_init",
+                "source_id": "task_init",
                 "target_id": "split"
             },
             {
-                "id": "e2",
+                "id": "e_ok",
                 "source_id": "split",
                 "target_id": "p_split",
                 "condition": "ok == true"
             },
             {
-                "id": "e_alt",
+                "id": "e_fail",
                 "source_id": "split",
                 "target_id": "alt_path",
                 "condition": "ok == false"
             },
             {
-                "id": "e3",
+                "id": "e_p1",
                 "source_id": "p_split",
                 "target_id": "t1"
             },
             {
-                "id": "e4",
+                "id": "e_p2",
                 "source_id": "p_split",
                 "target_id": "t2"
             },
             {
-                "id": "e5",
+                "id": "e_j1",
                 "source_id": "t1",
                 "target_id": "p_join"
             },
             {
-                "id": "e6",
+                "id": "e_j2",
                 "source_id": "t2",
                 "target_id": "p_join"
             },
             {
-                "id": "e7",
+                "id": "e_pj_to_ej",
                 "source_id": "p_join",
                 "target_id": "e_join"
             },
             {
-                "id": "e8",
+                "id": "e_alt_to_ej",
                 "source_id": "alt_path",
                 "target_id": "e_join"
             },
             {
-                "id": "e9",
+                "id": "e_end",
                 "source_id": "e_join",
                 "target_id": "end"
             }
@@ -132,12 +146,12 @@
     },
     "scenarios": [
         {
-            "name": "Success Path: True Condition -> Parallel Split -> Parallel Join -> Exclusive Join",
+            "name": "Scenario 1: Full Parallel Success Path",
             "steps": [
                 {
-                    "node_id": "start",
+                    "node_id": "task_init",
                     "results": {
-                        "passed": true
+                        "ok": true
                     }
                 },
                 {
@@ -151,15 +165,16 @@
             ],
             "expected_tokens": [
                 "end"
-            ]
+            ],
+            "expected_status": "COMPLETED"
         },
         {
-            "name": "Alt Path: False Condition -> Alternative Task -> Exclusive Join",
+            "name": "Scenario 2: Alternative Rejection Path",
             "steps": [
                 {
-                    "node_id": "start",
+                    "node_id": "task_init",
                     "results": {
-                        "passed": false
+                        "ok": false
                     }
                 },
                 {
@@ -169,15 +184,16 @@
             ],
             "expected_tokens": [
                 "end"
-            ]
+            ],
+            "expected_status": "COMPLETED"
         },
         {
-            "name": "Partial Join: Only one parallel branch complete, waiting at p_join",
+            "name": "Scenario 3: Asynchronous Parallel Execution (Partial Join)",
             "steps": [
                 {
-                    "node_id": "start",
+                    "node_id": "task_init",
                     "results": {
-                        "passed": true
+                        "ok": true
                     }
                 },
                 {
@@ -188,7 +204,44 @@
             "expected_tokens": [
                 "t2",
                 "p_join"
-            ]
+            ],
+            "expected_status": "ACTIVE"
+        },
+        {
+            "name": "Scenario 4: Immediate Parallel Split Initialization",
+            "steps": [
+                {
+                    "node_id": "task_init",
+                    "results": {
+                        "ok": true
+                    }
+                }
+            ],
+            "expected_tokens": [
+                "t1",
+                "t2"
+            ],
+            "expected_status": "ACTIVE"
+        },
+        {
+            "name": "Scenario 5: Reverse Partial Join (t2 completes first)",
+            "steps": [
+                {
+                    "node_id": "task_init",
+                    "results": {
+                        "ok": true
+                    }
+                },
+                {
+                    "node_id": "t2",
+                    "results": {}
+                }
+            ],
+            "expected_tokens": [
+                "t1",
+                "p_join"
+            ],
+            "expected_status": "ACTIVE"
         }
     ]
 }

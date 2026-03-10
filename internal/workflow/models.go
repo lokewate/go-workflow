@@ -12,6 +12,18 @@ const (
 	NodeTypeTask NodeType = "TASK"
 	// NodeTypeGateway represents a decision point or merge point.
 	NodeTypeGateway NodeType = "GATEWAY"
+	// NodeTypeEvent represents a start or end event.
+	NodeTypeEvent NodeType = "EVENT"
+)
+
+// EventType defines the kind of event node.
+type EventType string
+
+const (
+	// StartEvent marks the entry point of a workflow path.
+	StartEvent EventType = "START"
+	// EndEvent marks the termination point of a workflow path.
+	EndEvent EventType = "END"
 )
 
 // GatewayType defines the behavior of a gateway node.
@@ -34,6 +46,7 @@ type Node struct {
 	Type        NodeType          `json:"type"`
 	Name        string            `json:"name"`
 	TaskType    string            `json:"task_type,omitempty"`
+	EventType   EventType         `json:"event_type,omitempty"`
 	GatewayType GatewayType       `json:"gateway_type,omitempty"`
 	Outputs     map[string]string `json:"outputs,omitempty"`
 	X           int               `json:"x"`
@@ -60,5 +73,6 @@ type Workflow struct {
 // WorkflowInstance represents a single execution of a workflow definition.
 type WorkflowInstance struct {
 	ID      string                `json:"id"`
+	Status  string                `json:"status"` // e.g., "ACTIVE", "COMPLETED"
 	Context context.GlobalContext `json:"-"`
 }

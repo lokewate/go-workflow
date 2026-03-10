@@ -25,6 +25,26 @@ func (e *Engine) getNode(id string) (Node, bool) {
 	return Node{}, false
 }
 
+// StartWorkflow begins workflow execution at the specified START event node.
+func (e *Engine) StartWorkflow(c wfctx.Context, inst *WorkflowInstance, startNodeID string) error {
+	log.Printf("[Engine] StartWorkflow: instID=%s, startNodeID=%s", inst.ID, startNodeID)
+	node, ok := e.getNode(startNodeID)
+	if !ok || node.Type != NodeTypeEvent || node.EventType != StartEvent {
+		return fmt.Errorf("start node %s not found or is not a START event", startNodeID)
+	}
+
+	// Status can be set to ACTIVE upon starting
+	inst.Status = "ACTIVE"
+
+	// Process the start node which will trigger transitions to the next nodes.
+	err := e.processTarget(c, inst, startNodeID)
+	if err != nil {
+		return err
+	}
+
+	return e.Repo.Save(c, inst)
+}
+
 // CompleteTask marks a task as finished and triggers the next transitions.
 func (e *Engine) CompleteTask(c wfctx.Context, instID string, nodeID string, results map[string]interface{}) error {
 	log.Printf("[Engine] CompleteTask: instID=%s, nodeID=%s", instID, nodeID)
@@ -58,28 +78,33 @@ func (e *Engine) CompleteTask(c wfctx.Context, instID string, nodeID string, res
 
 // transition moves tokens from a source node to its targets based on gateway logic.
 func (e *Engine) transition(c wfctx.Context, inst *WorkflowInstance, sourceID string) error {
-	log.Printf("[Engine] transition: sourceID=%s", sourceID)
 	sourceNode, ok := e.getNode(sourceID)
 	if !ok {
 		log.Printf("[Engine] transition: source node %s not found", sourceID)
 		return fmt.Errorf("source node %s not found", sourceID)
 	}
+	log.Printf("[Engine] transition: sourceID=%s sourceType=%s", sourceID, sourceNode.Type)
 	edges := e.getOutgoing(sourceID)
 	log.Printf("[Engine] transition: found %d outgoing edges", len(edges))
 	var targets []string
 
 	if sourceNode.Type == NodeTypeGateway && sourceNode.GatewayType == ExclusiveSplit {
+		log.Printf("[Engine] transition: sourceID=%s sourceType=%s ExclusiveSplit", sourceID, sourceNode.Type)
 		for _, edge := range edges {
+			log.Printf("[Engine] transition: sourceID=%s sourceType=%s ExclusiveSplit edge.Condition=%v", sourceID, sourceNode.Type, edge.Condition)
 			if edge.Condition == nil || context.EvaluateCondition(*edge.Condition, inst.Context) {
 				targets = append(targets, edge.TargetID)
 				break
 			}
 		}
+		log.Printf("[Engine] transition: sourceID=%s sourceType=%s ExclusiveSplit targets=%v", sourceID, sourceNode.Type, targets)
 	} else if sourceNode.Type == NodeTypeGateway && sourceNode.GatewayType == ParallelSplit {
+		log.Printf("[Engine] transition: sourceID=%s sourceType=%s ParallelSplit", sourceID, sourceNode.Type)
 		for _, edge := range edges {
 			targets = append(targets, edge.TargetID)
 		}
 	} else {
+		log.Printf("[Engine] transition: sourceID=%s sourceType=%s Default", sourceID, sourceNode.Type)
 		for _, edge := range edges {
 			targets = append(targets, edge.TargetID)
 		}
@@ -96,14 +121,28 @@ func (e *Engine) transition(c wfctx.Context, inst *WorkflowInstance, sourceID st
 
 // processTarget determines how to handle a specific node reached during a transition.
 func (e *Engine) processTarget(c wfctx.Context, inst *WorkflowInstance, nodeID string) error {
-	log.Printf("[Engine] processTarget: nodeID=%s", nodeID)
 	node, ok := e.getNode(nodeID)
 	if !ok {
 		log.Printf("[Engine] processTarget: node %s not found", nodeID)
 		return fmt.Errorf("node %s not found", nodeID)
 	}
+	log.Printf("[Engine] processTarget: nodeID=%s nodeType=%s", nodeID, node.Type)
 
 	tokens := inst.Context.GetTokens()
+
+	if node.Type == NodeTypeEvent {
+		switch node.EventType {
+		case StartEvent:
+			// Automatically transition to the next connected node(s).
+			return e.transition(c, inst, nodeID)
+		case EndEvent:
+			// Mark instance as completed and clear all tokens.
+			inst.Status = "COMPLETED"
+			inst.Context.SetTokens(nil)
+			return nil
+		}
+	}
+
 	if node.Type == NodeTypeTask {
 		tokens = append(tokens, context.Token{ID: uuid.NewString(), NodeID: nodeID, Status: context.TokenActive})
 		inst.Context.SetTokens(tokens)

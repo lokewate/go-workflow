@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 	"workflow-engine/internal/workflow"
-	wfctx "workflow-engine/internal/workflow/context"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -44,20 +43,30 @@ func TestWorkflows(t *testing.T) {
 				Workflow: &testFile.Workflow,
 			}
 
-			// All scenarios start with a token on the 'start' node
+			// Initialize instance
 			instID := "test-instance"
-
 			inst := &workflow.WorkflowInstance{
 				ID: instID,
 			}
 			repo.Save(ctx, inst)
-
-			// Reload to get context initialized
 			inst, _ = repo.Get(ctx, instID)
-			inst.Context.SetTokens([]wfctx.Token{{ID: "init-token", NodeID: "start", Status: wfctx.TokenActive}})
+
+			// Start workflow from the START node
+			err = engine.StartWorkflow(ctx, inst, "start")
+			assert.NoError(t, err)
 
 			// Execute mock task completions defined in JSON
+			// (Any START nodes in steps should be skipped as they no longer accept CompleteTask)
 			for _, step := range scenario.Steps {
+				if step.NodeID == "start" {
+					// We can put results into the context manually, simulating payload args
+					for k, v := range step.Results {
+						inst.Context.Set(k, v)
+					}
+					// Auto-save these results
+					repo.Save(ctx, inst)
+					continue
+				}
 				err := engine.CompleteTask(ctx, instID, step.NodeID, step.Results)
 				assert.NoError(t, err, "Failed completing step: %s", step.NodeID)
 			}
@@ -65,12 +74,29 @@ func TestWorkflows(t *testing.T) {
 			// Verify final state
 			finalInst, _ := repo.Get(ctx, instID)
 
-			// 1. Check Tokens
-			var actualTokenNodes []string
-			for _, tok := range finalInst.Context.GetTokens() {
-				actualTokenNodes = append(actualTokenNodes, tok.NodeID)
+			// Determine if scenario is meant to reach END
+			expectComplete := false
+			for _, expTok := range scenario.ExpectedTokens {
+				if expTok == "end" {
+					expectComplete = true
+					break
+				}
 			}
-			assert.ElementsMatch(t, scenario.ExpectedTokens, actualTokenNodes, "Tokens do not match expected end state")
+
+			if expectComplete {
+				// 1. Check Status
+				assert.Equal(t, "COMPLETED", finalInst.Status, "Workflow should be COMPLETED")
+
+				// 2. Check Tokens (should be empty for COMPLETED)
+				assert.Empty(t, finalInst.Context.GetTokens(), "Tokens should be empty after completion")
+			} else {
+				// 1. Check Tokens for partial completion
+				var actualTokenNodes []string
+				for _, tok := range finalInst.Context.GetTokens() {
+					actualTokenNodes = append(actualTokenNodes, tok.NodeID)
+				}
+				assert.ElementsMatch(t, scenario.ExpectedTokens, actualTokenNodes, "Tokens do not match expected end state")
+			}
 		})
 	}
 }
