@@ -24,7 +24,7 @@ const (
 	ParallelJoin GatewayType = "PARALLEL_JOIN"
 )
 
-// Node represents a single step or gateway in a workflow blueprint.
+// Node represents a single step or gateway in a workflow.
 type Node struct {
 	ID          string            `json:"id"`
 	Type        NodeType          `json:"type"`
@@ -70,7 +70,7 @@ type Token struct {
 	Status TokenStatus `json:"status"`
 }
 
-// Instance represents a single execution of a workflow blueprint.
+// Instance represents a single execution of a workflow.
 type Instance struct {
 	ID      string                 `json:"id"`
 	Payload map[string]interface{} `json:"payload"`
