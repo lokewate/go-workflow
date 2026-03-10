@@ -1,10 +1,10 @@
 package workflow
 
 import (
-	wfctx "context"
+	"context"
 	"fmt"
 	"log"
-	"workflow-engine/internal/workflow/context"
+	"workflow-engine/state"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +26,7 @@ func (e *Engine) getNode(id string) (Node, bool) {
 }
 
 // StartWorkflow begins workflow execution at the specified START event node.
-func (e *Engine) StartWorkflow(c wfctx.Context, inst *WorkflowInstance, startNodeID string) error {
+func (e *Engine) StartWorkflow(c context.Context, inst *WorkflowInstance, startNodeID string) error {
 	log.Printf("[Engine] StartWorkflow: instID=%s, startNodeID=%s", inst.ID, startNodeID)
 	node, ok := e.getNode(startNodeID)
 	if !ok || node.Type != NodeTypeEvent || node.EventType != StartEvent {
@@ -46,7 +46,7 @@ func (e *Engine) StartWorkflow(c wfctx.Context, inst *WorkflowInstance, startNod
 }
 
 // CompleteTask marks a task as finished and triggers the next transitions.
-func (e *Engine) CompleteTask(c wfctx.Context, instID string, nodeID string, results map[string]interface{}) error {
+func (e *Engine) CompleteTask(c context.Context, instID string, nodeID string, results map[string]interface{}) error {
 	log.Printf("[Engine] CompleteTask: instID=%s, nodeID=%s", instID, nodeID)
 	inst, err := e.Repo.Get(c, instID)
 	if err != nil {
@@ -77,7 +77,7 @@ func (e *Engine) CompleteTask(c wfctx.Context, instID string, nodeID string, res
 }
 
 // transition moves tokens from a source node to its targets based on gateway logic.
-func (e *Engine) transition(c wfctx.Context, inst *WorkflowInstance, sourceID string) error {
+func (e *Engine) transition(c context.Context, inst *WorkflowInstance, sourceID string) error {
 	sourceNode, ok := e.getNode(sourceID)
 	if !ok {
 		log.Printf("[Engine] transition: source node %s not found", sourceID)
@@ -92,7 +92,7 @@ func (e *Engine) transition(c wfctx.Context, inst *WorkflowInstance, sourceID st
 		log.Printf("[Engine] transition: sourceID=%s sourceType=%s ExclusiveSplit", sourceID, sourceNode.Type)
 		for _, edge := range edges {
 			log.Printf("[Engine] transition: sourceID=%s sourceType=%s ExclusiveSplit edge.Condition=%v", sourceID, sourceNode.Type, edge.Condition)
-			if edge.Condition == nil || context.EvaluateCondition(*edge.Condition, inst.Context) {
+			if edge.Condition == nil || state.EvaluateCondition(*edge.Condition, inst.Context) {
 				targets = append(targets, edge.TargetID)
 				break
 			}
@@ -120,7 +120,7 @@ func (e *Engine) transition(c wfctx.Context, inst *WorkflowInstance, sourceID st
 }
 
 // processTarget determines how to handle a specific node reached during a transition.
-func (e *Engine) processTarget(c wfctx.Context, inst *WorkflowInstance, nodeID string) error {
+func (e *Engine) processTarget(c context.Context, inst *WorkflowInstance, nodeID string) error {
 	node, ok := e.getNode(nodeID)
 	if !ok {
 		log.Printf("[Engine] processTarget: node %s not found", nodeID)
@@ -144,13 +144,13 @@ func (e *Engine) processTarget(c wfctx.Context, inst *WorkflowInstance, nodeID s
 	}
 
 	if node.Type == NodeTypeTask {
-		tokens = append(tokens, context.Token{ID: uuid.NewString(), NodeID: nodeID, Status: context.TokenActive})
+		tokens = append(tokens, state.Token{ID: uuid.NewString(), NodeID: nodeID, Status: state.TokenActive})
 		inst.Context.SetTokens(tokens)
 		return nil
 	}
 
 	if node.GatewayType == ParallelJoin {
-		tokens = append(tokens, context.Token{ID: uuid.NewString(), NodeID: nodeID, Status: context.TokenWaiting})
+		tokens = append(tokens, state.Token{ID: uuid.NewString(), NodeID: nodeID, Status: state.TokenWaiting})
 		inst.Context.SetTokens(tokens)
 		if len(e.getTokensAt(inst, nodeID)) >= len(e.getIncoming(nodeID)) {
 			e.removeTokensAt(inst, nodeID)
@@ -159,7 +159,7 @@ func (e *Engine) processTarget(c wfctx.Context, inst *WorkflowInstance, nodeID s
 		return nil
 	}
 
-	tokens = append(tokens, context.Token{ID: uuid.NewString(), NodeID: nodeID, Status: context.TokenActive})
+	tokens = append(tokens, state.Token{ID: uuid.NewString(), NodeID: nodeID, Status: state.TokenActive})
 	inst.Context.SetTokens(tokens)
 	err := e.transition(c, inst, nodeID)
 	e.removeTokensAt(inst, nodeID)
@@ -187,7 +187,7 @@ func (e *Engine) getIncoming(id string) (res []Edge) {
 }
 
 // getTokensAt returns all active or waiting tokens currently at the specified node.
-func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []context.Token) {
+func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []state.Token) {
 	for _, t := range inst.Context.GetTokens() {
 		if t.NodeID == id {
 			res = append(res, t)
@@ -198,7 +198,7 @@ func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []context.T
 
 // removeTokensAt deletes all tokens from the instance that are currently at the specified node.
 func (e *Engine) removeTokensAt(inst *WorkflowInstance, nodeID string) {
-	var next []context.Token
+	var next []state.Token
 	for _, t := range inst.Context.GetTokens() {
 		if t.NodeID != nodeID {
 			next = append(next, t)

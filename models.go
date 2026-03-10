@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"workflow-engine/internal/workflow/context"
+	"workflow-engine/state"
 )
 
 // NodeType defines the kind of node in a workflow (e.g., TASK, GATEWAY).
@@ -72,7 +72,7 @@ type Workflow struct {
 
 // WorkflowInstance represents a single execution of a workflow definition.
 type WorkflowInstance struct {
-	ID      string                `json:"id"`
-	Status  string                `json:"status"` // e.g., "ACTIVE", "COMPLETED"
-	Context context.GlobalContext `json:"-"`
+	ID      string              `json:"id"`
+	Status  string              `json:"status"` // e.g., "ACTIVE", "COMPLETED"
+	Context state.GlobalContext `json:"-"`
 }

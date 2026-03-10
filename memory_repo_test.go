@@ -3,7 +3,7 @@ package workflow
 import (
 	ctx "context"
 	"testing"
-	"workflow-engine/internal/workflow/context"
+	"workflow-engine/state"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -26,7 +26,7 @@ func TestMemoryRepo(t *testing.T) {
 	t.Run("Context Persistence", func(t *testing.T) {
 		inst, _ := repo.Get(c, "inst-1")
 		inst.Context.Set("key", "value")
-		inst.Context.SetTokens([]context.Token{{ID: "t1", NodeID: "n1", Status: context.TokenActive}})
+		inst.Context.SetTokens([]state.Token{{ID: "t1", NodeID: "n1", Status: state.TokenActive}})
 
 		// Reload instance
 		retrieved, _ := repo.Get(c, "inst-1")

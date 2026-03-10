@@ -1,24 +1,24 @@
-package main
+package workflow
 
 import (
 	"context"
 	"encoding/json"
 	"os"
 	"testing"
-	"workflow-engine/internal/workflow"
 
 	"github.com/stretchr/testify/assert"
 )
 
 type TestFile struct {
-	Workflow  workflow.Workflow `json:"workflow"`
-	Scenarios []TestScenario    `json:"scenarios"`
+	Workflow  Workflow       `json:"workflow"`
+	Scenarios []TestScenario `json:"scenarios"`
 }
 
 type TestScenario struct {
 	Name           string     `json:"name"`
 	Steps          []TestStep `json:"steps"`
 	ExpectedTokens []string   `json:"expected_tokens"`
+	ExpectedStatus string     `json:"expected_status"`
 }
 
 type TestStep struct {
@@ -37,15 +37,15 @@ func TestWorkflows(t *testing.T) {
 	for _, scenario := range testFile.Scenarios {
 		t.Run(scenario.Name, func(t *testing.T) {
 			ctx := context.Background()
-			repo := workflow.NewMemoryRepo()
-			engine := &workflow.Engine{
+			repo := NewMemoryRepo()
+			engine := &Engine{
 				Repo:     repo,
 				Workflow: &testFile.Workflow,
 			}
 
 			// Initialize instance
 			instID := "test-instance"
-			inst := &workflow.WorkflowInstance{
+			inst := &WorkflowInstance{
 				ID: instID,
 			}
 			repo.Save(ctx, inst)
@@ -74,19 +74,24 @@ func TestWorkflows(t *testing.T) {
 			// Verify final state
 			finalInst, _ := repo.Get(ctx, instID)
 
-			// Determine if scenario is meant to reach END
-			expectComplete := false
-			for _, expTok := range scenario.ExpectedTokens {
-				if expTok == "end" {
-					expectComplete = true
-					break
+			// 1. Check expected status
+			if scenario.ExpectedStatus != "" {
+				assert.Equal(t, scenario.ExpectedStatus, finalInst.Status, "Workflow status does not match")
+			} else {
+				// Fallback to expecting completed if "end" is in tokens
+				expectComplete := false
+				for _, expTok := range scenario.ExpectedTokens {
+					if expTok == "end" {
+						expectComplete = true
+						break
+					}
+				}
+				if expectComplete {
+					assert.Equal(t, "COMPLETED", finalInst.Status, "Workflow should be COMPLETED")
 				}
 			}
 
-			if expectComplete {
-				// 1. Check Status
-				assert.Equal(t, "COMPLETED", finalInst.Status, "Workflow should be COMPLETED")
-
+			if finalInst.Status == "COMPLETED" {
 				// 2. Check Tokens (should be empty for COMPLETED)
 				assert.Empty(t, finalInst.Context.GetTokens(), "Tokens should be empty after completion")
 			} else {
