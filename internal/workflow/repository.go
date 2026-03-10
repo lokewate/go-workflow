@@ -2,8 +2,10 @@ package workflow
 
 import "context"
 
-// InstanceRepository provides an interface for persisting and retrieving workflow instances.
-type InstanceRepository interface {
-	Get(ctx context.Context, id string) (*Instance, error)
-	Save(ctx context.Context, inst *Instance) error
+// Repo defines the interface for persisting workflow instances and their global contexts.
+type Repo interface {
+	Get(ctx context.Context, id string) (*WorkflowInstance, error)
+	Save(ctx context.Context, inst *WorkflowInstance) error
+	GetContext(ctx context.Context, id string) (GlobalContext, error)
+	SaveContext(ctx context.Context, id string, gctx GlobalContext) error
 }

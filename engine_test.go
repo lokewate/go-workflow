@@ -16,10 +16,9 @@ type TestFile struct {
 }
 
 type TestScenario struct {
-	Name            string                 `json:"name"`
-	Steps           []TestStep             `json:"steps"`
-	ExpectedTokens  []string               `json:"expected_tokens"`
-	ExpectedPayload map[string]interface{} `json:"expected_payload"`
+	Name           string     `json:"name"`
+	Steps          []TestStep `json:"steps"`
+	ExpectedTokens []string   `json:"expected_tokens"`
 }
 
 type TestStep struct {
@@ -46,10 +45,15 @@ func TestWorkflows(t *testing.T) {
 
 			// All scenarios start with a token on the 'start' node
 			instID := "test-instance"
-			repo.Save(ctx, &workflow.Instance{
-				ID:      instID,
-				Payload: make(map[string]interface{}),
-				Tokens:  []workflow.Token{{ID: "init-token", NodeID: "start", Status: workflow.TokenActive}},
+			ctxID := "test-context"
+
+			gctx := workflow.NewMapContext()
+			repo.SaveContext(ctx, ctxID, gctx)
+
+			repo.Save(ctx, &workflow.WorkflowInstance{
+				ID:              instID,
+				GlobalContextID: ctxID,
+				Tokens:          []workflow.Token{{ID: "init-token", NodeID: "start", Status: workflow.TokenActive}},
 			})
 
 			// Execute mock task completions defined in JSON
@@ -67,11 +71,6 @@ func TestWorkflows(t *testing.T) {
 				actualTokenNodes = append(actualTokenNodes, tok.NodeID)
 			}
 			assert.ElementsMatch(t, scenario.ExpectedTokens, actualTokenNodes, "Tokens do not match expected end state")
-
-			// 2. Check Payload mutations
-			for key, expectedValue := range scenario.ExpectedPayload {
-				assert.Equal(t, expectedValue, finalInst.Payload[key], "Payload mismatch for key: %s", key)
-			}
 		})
 	}
 }

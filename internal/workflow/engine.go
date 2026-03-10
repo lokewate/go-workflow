@@ -10,7 +10,7 @@ import (
 
 // Engine handles the execution and transitions of workflow instances based on a workflow definition.
 type Engine struct {
-	Repo     InstanceRepository
+	Repo     Repo
 	Workflow *Workflow
 }
 
@@ -24,8 +24,8 @@ func (e *Engine) getNode(id string) (Node, bool) {
 	return Node{}, false
 }
 
-// CompleteTask marks a task as finished, maps results to the payload, and triggers transitions.
-func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, results map[string]interface{}) error {
+// CompleteTask marks a task as finished and triggers the next transitions.
+func (e *Engine) CompleteTask(ctx context.Context, instID string, nodeID string, results map[string]interface{}) error {
 	log.Printf("[Engine] CompleteTask: instID=%s, nodeID=%s", instID, nodeID)
 	inst, err := e.Repo.Get(ctx, instID)
 	if err != nil {
@@ -35,17 +35,23 @@ func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, result
 
 	node, ok := e.getNode(nodeID)
 	if !ok {
-		log.Printf("[Engine] CompleteTask: node %s not found in blueprint", nodeID)
+		log.Printf("[Engine] CompleteTask: node %s not found in workflow", nodeID)
 		return fmt.Errorf("node %s not found", nodeID)
 	}
 	log.Printf("[Engine] CompleteTask: processing output mappings for node %s", nodeID)
-	if inst.Payload == nil {
-		inst.Payload = make(map[string]interface{})
+	gctx, err := e.Repo.GetContext(ctx, inst.GlobalContextID)
+	if err != nil {
+		return fmt.Errorf("failed to load context: %w", err)
 	}
+
 	for global, local := range node.Outputs {
 		if val, ok := results[local]; ok {
-			inst.Payload[global] = val
+			gctx.Set(global, val)
 		}
+	}
+
+	if err := e.Repo.SaveContext(ctx, inst.GlobalContextID, gctx); err != nil {
+		return fmt.Errorf("failed to save context: %w", err)
 	}
 
 	e.removeTokensAt(inst, nodeID)
@@ -58,7 +64,7 @@ func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, result
 }
 
 // transition moves tokens from a source node to its targets based on gateway logic.
-func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string) error {
+func (e *Engine) transition(ctx context.Context, inst *WorkflowInstance, sourceID string) error {
 	log.Printf("[Engine] transition: sourceID=%s", sourceID)
 	sourceNode, ok := e.getNode(sourceID)
 	if !ok {
@@ -70,8 +76,13 @@ func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string
 	var targets []string
 
 	if sourceNode.Type == NodeTypeGateway && sourceNode.GatewayType == ExclusiveSplit {
+		gctx, err := e.Repo.GetContext(ctx, inst.GlobalContextID)
+		if err != nil {
+			return fmt.Errorf("failed to load context for transition: %w", err)
+		}
+
 		for _, edge := range edges {
-			if edge.Condition == nil || EvaluateCondition(*edge.Condition, inst.Payload) {
+			if edge.Condition == nil || EvaluateCondition(*edge.Condition, gctx) {
 				targets = append(targets, edge.TargetID)
 				break
 			}
@@ -96,7 +107,7 @@ func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string
 }
 
 // processTarget determines how to handle a specific node reached during a transition.
-func (e *Engine) processTarget(ctx context.Context, inst *Instance, nodeID string) error {
+func (e *Engine) processTarget(ctx context.Context, inst *WorkflowInstance, nodeID string) error {
 	log.Printf("[Engine] processTarget: nodeID=%s", nodeID)
 	node, ok := e.getNode(nodeID)
 	if !ok {
@@ -139,7 +150,7 @@ func (e *Engine) getIncoming(id string) (res []Edge) {
 	return
 }
 
-func (e *Engine) getTokensAt(inst *Instance, id string) (res []Token) {
+func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []Token) {
 	for _, t := range inst.Tokens {
 		if t.NodeID == id {
 			res = append(res, t)
@@ -148,10 +159,10 @@ func (e *Engine) getTokensAt(inst *Instance, id string) (res []Token) {
 	return
 }
 
-func (e *Engine) removeTokensAt(inst *Instance, id string) {
+func (e *Engine) removeTokensAt(inst *WorkflowInstance, nodeID string) {
 	var next []Token
 	for _, t := range inst.Tokens {
-		if t.NodeID != id {
+		if t.NodeID != nodeID {
 			next = append(next, t)
 		}
 	}
