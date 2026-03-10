@@ -1,5 +1,9 @@
 package workflow
 
+import (
+	"workflow-engine/internal/workflow/context"
+)
+
 // NodeType defines the kind of node in a workflow (e.g., TASK, GATEWAY).
 type NodeType string
 
@@ -53,26 +57,8 @@ type Workflow struct {
 	Edges   []Edge `json:"edges"`
 }
 
-// TokenStatus defines the current state of a workflow token.
-type TokenStatus string
-
-const (
-	// TokenActive indicates the token is currently at a task being performed.
-	TokenActive TokenStatus = "ACTIVE"
-	// TokenWaiting indicates the token is waiting at a join gateway.
-	TokenWaiting TokenStatus = "WAITING"
-)
-
-// Token tracks the execution progress within a workflow instance.
-type Token struct {
-	ID     string      `json:"id"`
-	NodeID string      `json:"node_id"`
-	Status TokenStatus `json:"status"`
-}
-
 // WorkflowInstance represents a single execution of a workflow definition.
 type WorkflowInstance struct {
-	ID              string  `json:"id"`
-	GlobalContextID string  `json:"global_context_id"`
-	Tokens          []Token `json:"tokens"`
+	ID      string                `json:"id"`
+	Context context.GlobalContext `json:"-"`
 }

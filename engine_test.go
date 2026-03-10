@@ -46,16 +46,15 @@ func TestWorkflows(t *testing.T) {
 
 			// All scenarios start with a token on the 'start' node
 			instID := "test-instance"
-			ctxID := "test-context"
 
-			gctx := wfctx.NewMapContext()
-			repo.SaveContext(ctx, ctxID, gctx)
+			inst := &workflow.WorkflowInstance{
+				ID: instID,
+			}
+			repo.Save(ctx, inst)
 
-			repo.Save(ctx, &workflow.WorkflowInstance{
-				ID:              instID,
-				GlobalContextID: ctxID,
-				Tokens:          []workflow.Token{{ID: "init-token", NodeID: "start", Status: workflow.TokenActive}},
-			})
+			// Reload to get context initialized
+			inst, _ = repo.Get(ctx, instID)
+			inst.Context.SetTokens([]wfctx.Token{{ID: "init-token", NodeID: "start", Status: wfctx.TokenActive}})
 
 			// Execute mock task completions defined in JSON
 			for _, step := range scenario.Steps {
@@ -68,7 +67,7 @@ func TestWorkflows(t *testing.T) {
 
 			// 1. Check Tokens
 			var actualTokenNodes []string
-			for _, tok := range finalInst.Tokens {
+			for _, tok := range finalInst.Context.GetTokens() {
 				actualTokenNodes = append(actualTokenNodes, tok.NodeID)
 			}
 			assert.ElementsMatch(t, scenario.ExpectedTokens, actualTokenNodes, "Tokens do not match expected end state")

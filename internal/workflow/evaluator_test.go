@@ -62,9 +62,16 @@ func TestEvaluateCondition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gctx := context.NewMapContext()
+			loadFn := func(id string) (map[string]interface{}, []context.Token, error) {
+				return make(map[string]interface{}), nil, nil
+			}
+			saveFn := func(id string, data map[string]interface{}, tokens []context.Token) error {
+				return nil
+			}
+			gctx := context.NewMapContext(loadFn, saveFn)
+			_ = gctx.Load("test")
 			tt.setup(gctx)
-			result := EvaluateCondition(tt.condition, gctx)
+			result := context.EvaluateCondition(tt.condition, gctx)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
