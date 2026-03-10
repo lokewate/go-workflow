@@ -8,15 +8,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// Engine handles the execution and transitions of workflow instances based on a blueprint.
+// Engine handles the execution and transitions of workflow instances based on a workflow definition.
 type Engine struct {
-	Repo      InstanceRepository
-	Blueprint *Blueprint
+	Repo     InstanceRepository
+	Workflow *Workflow
 }
 
-// getNode finds a node by its ID within the current blueprint.
+// getNode finds a node by its ID within the current workflow.
 func (e *Engine) getNode(id string) (Node, bool) {
-	for _, n := range e.Blueprint.Nodes {
+	for _, n := range e.Workflow.Nodes {
 		if n.ID == id {
 			return n, true
 		}
@@ -122,7 +122,7 @@ func (e *Engine) processTarget(ctx context.Context, inst *Instance, nodeID strin
 }
 
 func (e *Engine) getOutgoing(id string) (res []Edge) {
-	for _, edge := range e.Blueprint.Edges {
+	for _, edge := range e.Workflow.Edges {
 		if edge.SourceID == id {
 			res = append(res, edge)
 		}
@@ -131,7 +131,7 @@ func (e *Engine) getOutgoing(id string) (res []Edge) {
 }
 
 func (e *Engine) getIncoming(id string) (res []Edge) {
-	for _, edge := range e.Blueprint.Edges {
+	for _, edge := range e.Workflow.Edges {
 		if edge.TargetID == id {
 			res = append(res, edge)
 		}

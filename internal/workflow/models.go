@@ -44,8 +44,8 @@ type Edge struct {
 	Condition *string `json:"condition,omitempty"`
 }
 
-// Blueprint defines the static structure of a workflow.
-type Blueprint struct {
+// Workflow defines the static structure of a workflow.
+type Workflow struct {
 	ID      string `json:"workflow_id"`
 	Name    string `json:"name"`
 	Version int    `json:"version"`

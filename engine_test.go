@@ -11,8 +11,8 @@ import (
 )
 
 type TestFile struct {
-	Workflow  workflow.Blueprint `json:"workflow"`
-	Scenarios []TestScenario     `json:"scenarios"`
+	Workflow  workflow.Workflow `json:"workflow"`
+	Scenarios []TestScenario    `json:"scenarios"`
 }
 
 type TestScenario struct {
@@ -40,8 +40,8 @@ func TestWorkflows(t *testing.T) {
 			ctx := context.Background()
 			repo := workflow.NewMemoryRepo()
 			engine := &workflow.Engine{
-				Repo:      repo,
-				Blueprint: &testFile.Workflow,
+				Repo:     repo,
+				Workflow: &testFile.Workflow,
 			}
 
 			// All scenarios start with a token on the 'start' node

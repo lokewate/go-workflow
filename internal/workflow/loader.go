@@ -5,11 +5,11 @@ import (
 	"os"
 )
 
-func LoadBlueprint(path string) (*Blueprint, error) {
+func LoadWorkflow(path string) (*Workflow, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var bp Blueprint
-	return &bp, json.Unmarshal(b, &bp)
+	var wf Workflow
+	return &wf, json.Unmarshal(b, &wf)
 }
