@@ -11,7 +11,9 @@ import (
 
 // Engine handles the execution and transitions of workflow instances based on a workflow definition.
 type Engine struct {
-	Repo     Repo
+	// Repo is the repository used for persisting workflow instances.
+	Repo Repo
+	// Workflow is the static definition that this engine executes.
 	Workflow *Workflow
 }
 
@@ -34,7 +36,7 @@ func (e *Engine) StartWorkflow(c context.Context, inst *WorkflowInstance, startN
 	}
 
 	// Status can be set to ACTIVE upon starting
-	inst.Status = "ACTIVE"
+	inst.Status = StatusActive
 
 	// Process the start node which will trigger transitions to the next nodes.
 	err := e.processTarget(c, inst, startNodeID)
@@ -137,7 +139,7 @@ func (e *Engine) processTarget(c context.Context, inst *WorkflowInstance, nodeID
 			return e.transition(c, inst, nodeID)
 		case EndEvent:
 			// Mark instance as completed and clear all tokens.
-			inst.Status = "COMPLETED"
+			inst.Status = StatusCompleted
 			inst.Context.SetTokens(nil)
 			return nil
 		}

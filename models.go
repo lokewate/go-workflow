@@ -40,6 +40,16 @@ const (
 	ParallelJoin GatewayType = "PARALLEL_JOIN"
 )
 
+// WorkflowStatus defines the possible states of a workflow instance.
+type WorkflowStatus string
+
+const (
+	// StatusActive means the workflow is currently running.
+	StatusActive WorkflowStatus = "ACTIVE"
+	// StatusCompleted means the workflow has reached an END event.
+	StatusCompleted WorkflowStatus = "COMPLETED"
+)
+
 // Node represents a single step or gateway in a workflow.
 type Node struct {
 	// ID is the unique identifier for the node.
@@ -56,9 +66,9 @@ type Node struct {
 	GatewayType GatewayType `json:"gateway_type,omitempty"`
 	// Outputs defines the mapping from local task results to global context keys.
 	Outputs map[string]string `json:"outputs,omitempty"`
-	// X is the horizontal position of the node in a designer.
+	// X is the horizontal position of the node in a visual editor.
 	X int `json:"x"`
-	// Y is the vertical position of the node in a designer.
+	// Y is the vertical position of the node in a visual editor.
 	Y int `json:"y"`
 }
 
@@ -92,8 +102,8 @@ type Workflow struct {
 type WorkflowInstance struct {
 	// ID is the unique identifier for this specific execution instance.
 	ID string `json:"id"`
-	// Status tracks the current state of the instance (e.g., "ACTIVE", "COMPLETED").
-	Status string `json:"status"`
+	// Status tracks the current state of the instance.
+	Status WorkflowStatus `json:"status"`
 	// Context holds the dynamic state and tokens for this instance.
 	Context state.GlobalContext `json:"-"`
 }

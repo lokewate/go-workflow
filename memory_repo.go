@@ -9,10 +9,12 @@ import (
 
 // MemoryRepo implements Repo using an in-memory map.
 type MemoryRepo struct {
-	mu        sync.RWMutex
+	mu sync.RWMutex
+	// instances maps instance IDs to their workflow instance objects.
 	instances map[string]*WorkflowInstance
-	// We store data and tokens separately to simulate persistent storage
-	data   map[string]map[string]interface{}
+	// data stores workflow-wide variables, indexed by instance ID.
+	data map[string]map[string]interface{}
+	// tokens tracks current execution markers for each instance.
 	tokens map[string][]state.Token
 }
 

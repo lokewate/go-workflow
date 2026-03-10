@@ -16,8 +16,11 @@ const (
 
 // Token tracks the execution progress within a workflow instance.
 type Token struct {
-	ID     string      `json:"id"`
-	NodeID string      `json:"node_id"`
+	// ID is a unique identifier for the token.
+	ID string `json:"id"`
+	// NodeID is the ID of the node where the token is currently located.
+	NodeID string `json:"node_id"`
+	// Status indicates if the token is active or waiting.
 	Status TokenStatus `json:"status"`
 }
 
@@ -40,9 +43,11 @@ type GlobalContext interface {
 
 // MapContext is an in-memory implementation of GlobalContext using a map.
 type MapContext struct {
-	mu     sync.RWMutex
-	id     string
-	data   map[string]interface{}
+	mu sync.RWMutex
+	id string
+	// data holds the workflow-wide variables and their values.
+	data map[string]interface{}
+	// tokens tracks the current execution markers in the workflow.
 	tokens []Token
 	// saveFn handles persistence. It's called internally on every mutation.
 	saveFn func(id string, data map[string]interface{}, tokens []Token) error

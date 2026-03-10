@@ -1,11 +1,11 @@
 package workflow
 
 import (
-	ctx "context"
+	"context"
 )
 
 // Repo defines the interface for persisting workflow instances.
 type Repo interface {
-	Get(c ctx.Context, id string) (*WorkflowInstance, error)
-	Save(c ctx.Context, inst *WorkflowInstance) error
+	Get(c context.Context, id string) (*WorkflowInstance, error)
+	Save(c context.Context, inst *WorkflowInstance) error
 }

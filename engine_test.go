@@ -15,10 +15,10 @@ type TestFile struct {
 }
 
 type TestScenario struct {
-	Name           string     `json:"name"`
-	Steps          []TestStep `json:"steps"`
-	ExpectedTokens []string   `json:"expected_tokens"`
-	ExpectedStatus string     `json:"expected_status"`
+	Name           string         `json:"name"`
+	Steps          []TestStep     `json:"steps"`
+	ExpectedTokens []string       `json:"expected_tokens"`
+	ExpectedStatus WorkflowStatus `json:"expected_status"`
 }
 
 type TestStep struct {
