@@ -132,6 +132,7 @@ func (e *Engine) processTarget(ctx context.Context, inst *WorkflowInstance, node
 	return e.transition(ctx, inst, nodeID)
 }
 
+// getOutgoing retrieves all edges where the specified node is the source.
 func (e *Engine) getOutgoing(id string) (res []Edge) {
 	for _, edge := range e.Workflow.Edges {
 		if edge.SourceID == id {
@@ -141,6 +142,7 @@ func (e *Engine) getOutgoing(id string) (res []Edge) {
 	return
 }
 
+// getIncoming retrieves all edges where the specified node is the target.
 func (e *Engine) getIncoming(id string) (res []Edge) {
 	for _, edge := range e.Workflow.Edges {
 		if edge.TargetID == id {
@@ -150,6 +152,7 @@ func (e *Engine) getIncoming(id string) (res []Edge) {
 	return
 }
 
+// getTokensAt returns all active or waiting tokens currently at the specified node.
 func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []Token) {
 	for _, t := range inst.Tokens {
 		if t.NodeID == id {
@@ -159,6 +162,7 @@ func (e *Engine) getTokensAt(inst *WorkflowInstance, id string) (res []Token) {
 	return
 }
 
+// removeTokensAt deletes all tokens from the instance that are currently at the specified node.
 func (e *Engine) removeTokensAt(inst *WorkflowInstance, nodeID string) {
 	var next []Token
 	for _, t := range inst.Tokens {

@@ -93,12 +93,14 @@ func NewMapContext() *MapContext {
 	return &MapContext{data: make(map[string]interface{})}
 }
 
+// Get retrieves the value for a given key from the context.
 func (m *MapContext) Get(key string) interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.data[key]
 }
 
+// Set stores a value for a given key in the context.
 func (m *MapContext) Set(key string, val interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -108,6 +110,7 @@ func (m *MapContext) Set(key string, val interface{}) {
 	m.data[key] = val
 }
 
+// AsMap returns a point-in-time copy of the internal data as a map.
 func (m *MapContext) AsMap() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

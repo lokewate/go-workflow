@@ -2,6 +2,8 @@ package workflow
 
 import "github.com/antonmedv/expr"
 
+// EvaluateCondition parses and executes a boolean expression against the global context.
+// It uses the expr library for evaluation and returns false if the expression is invalid or fails.
 func EvaluateCondition(condition string, ctx GlobalContext) bool {
 	env := map[string]interface{}{"payload": ctx.AsMap()}
 	program, err := expr.Compile(condition, expr.AsBool())
