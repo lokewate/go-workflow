@@ -3,12 +3,13 @@ package workflow
 import (
 	"encoding/json"
 	"testing"
+	"workflow-engine/internal/workflow/context"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMapContext(t *testing.T) {
-	gctx := NewMapContext()
+	gctx := context.NewMapContext()
 
 	t.Run("Set and Get", func(t *testing.T) {
 		gctx.Set("foo", "bar")

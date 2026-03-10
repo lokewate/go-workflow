@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 	"workflow-engine/internal/workflow"
+	wfctx "workflow-engine/internal/workflow/context"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -47,7 +48,7 @@ func TestWorkflows(t *testing.T) {
 			instID := "test-instance"
 			ctxID := "test-context"
 
-			gctx := workflow.NewMapContext()
+			gctx := wfctx.NewMapContext()
 			repo.SaveContext(ctx, ctxID, gctx)
 
 			repo.Save(ctx, &workflow.WorkflowInstance{

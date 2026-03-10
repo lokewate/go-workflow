@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"testing"
+	"workflow-engine/internal/workflow/context"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -10,13 +11,13 @@ func TestEvaluateCondition(t *testing.T) {
 	tests := []struct {
 		name      string
 		condition string
-		setup     func(gctx GlobalContext)
+		setup     func(gctx context.GlobalContext)
 		expected  bool
 	}{
 		{
 			name:      "simple true boolean",
 			condition: "payload.ok == true",
-			setup: func(gctx GlobalContext) {
+			setup: func(gctx context.GlobalContext) {
 				gctx.Set("ok", true)
 			},
 			expected: true,
@@ -24,7 +25,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name:      "simple false boolean",
 			condition: "payload.ok == true",
-			setup: func(gctx GlobalContext) {
+			setup: func(gctx context.GlobalContext) {
 				gctx.Set("ok", false)
 			},
 			expected: false,
@@ -32,7 +33,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name:      "numeric comparison",
 			condition: "payload.count > 5",
-			setup: func(gctx GlobalContext) {
+			setup: func(gctx context.GlobalContext) {
 				gctx.Set("count", 10)
 			},
 			expected: true,
@@ -40,7 +41,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name:      "string comparison",
 			condition: "payload.status == 'completed'",
-			setup: func(gctx GlobalContext) {
+			setup: func(gctx context.GlobalContext) {
 				gctx.Set("status", "completed")
 			},
 			expected: true,
@@ -48,20 +49,20 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name:      "missing key",
 			condition: "payload.missing == true",
-			setup:     func(gctx GlobalContext) {},
+			setup:     func(gctx context.GlobalContext) {},
 			expected:  false,
 		},
 		{
 			name:      "invalid syntax",
 			condition: "!!!invalid!!!",
-			setup:     func(gctx GlobalContext) {},
+			setup:     func(gctx context.GlobalContext) {},
 			expected:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gctx := NewMapContext()
+			gctx := context.NewMapContext()
 			tt.setup(gctx)
 			result := EvaluateCondition(tt.condition, gctx)
 			assert.Equal(t, tt.expected, result)
