@@ -8,12 +8,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// Engine handles the execution and transitions of workflow instances based on a blueprint.
 type Engine struct {
 	Repo      InstanceRepository
 	Blueprint *Blueprint
 }
 
-// Helper to find node by ID in the slice
+// getNode finds a node by its ID within the current blueprint.
 func (e *Engine) getNode(id string) (Node, bool) {
 	for _, n := range e.Blueprint.Nodes {
 		if n.ID == id {
@@ -23,6 +24,7 @@ func (e *Engine) getNode(id string) (Node, bool) {
 	return Node{}, false
 }
 
+// CompleteTask marks a task as finished, maps results to the payload, and triggers transitions.
 func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, results map[string]interface{}) error {
 	log.Printf("[Engine] CompleteTask: instID=%s, nodeID=%s", instID, nodeID)
 	inst, err := e.Repo.Get(ctx, instID)
@@ -55,6 +57,7 @@ func (e *Engine) CompleteTask(ctx context.Context, instID, nodeID string, result
 	return e.Repo.Save(ctx, inst)
 }
 
+// transition moves tokens from a source node to its targets based on gateway logic.
 func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string) error {
 	log.Printf("[Engine] transition: sourceID=%s", sourceID)
 	sourceNode, ok := e.getNode(sourceID)
@@ -92,6 +95,7 @@ func (e *Engine) transition(ctx context.Context, inst *Instance, sourceID string
 	return nil
 }
 
+// processTarget determines how to handle a specific node reached during a transition.
 func (e *Engine) processTarget(ctx context.Context, inst *Instance, nodeID string) error {
 	log.Printf("[Engine] processTarget: nodeID=%s", nodeID)
 	node, ok := e.getNode(nodeID)
