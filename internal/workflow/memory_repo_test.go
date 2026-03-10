@@ -24,7 +24,7 @@ func TestMemoryRepo(t *testing.T) {
 	t.Run("Get Non-existent Instance", func(t *testing.T) {
 		retrieved, err := repo.Get(ctx, "missing")
 		assert.Error(t, err)
-		assert.Nil(retrieved)
+		assert.Nil(t, retrieved)
 	})
 
 	t.Run("Save and Get Context", func(t *testing.T) {
@@ -42,6 +42,6 @@ func TestMemoryRepo(t *testing.T) {
 	t.Run("Get Non-existent Context", func(t *testing.T) {
 		retrieved, err := repo.GetContext(ctx, "missing")
 		assert.Error(t, err)
-		assert.Nil(retrieved)
+		assert.Nil(t, retrieved)
 	})
 }
