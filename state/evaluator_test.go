@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,12 +13,13 @@ func TestEvaluateCondition(t *testing.T) {
 		condition string
 		setup     func(gctx GlobalContext)
 		expected  bool
+		wantErr   bool
 	}{
 		{
 			name:      "simple true boolean",
 			condition: "ok == true",
 			setup: func(gctx GlobalContext) {
-				gctx.Set("ok", true)
+				gctx.Set(context.Background(), "ok", true)
 			},
 			expected: true,
 		},
@@ -25,7 +27,7 @@ func TestEvaluateCondition(t *testing.T) {
 			name:      "simple false boolean",
 			condition: "ok == true",
 			setup: func(gctx GlobalContext) {
-				gctx.Set("ok", false)
+				gctx.Set(context.Background(), "ok", false)
 			},
 			expected: false,
 		},
@@ -33,7 +35,7 @@ func TestEvaluateCondition(t *testing.T) {
 			name:      "numeric comparison",
 			condition: "count > 5",
 			setup: func(gctx GlobalContext) {
-				gctx.Set("count", 10)
+				gctx.Set(context.Background(), "count", 10)
 			},
 			expected: true,
 		},
@@ -41,7 +43,7 @@ func TestEvaluateCondition(t *testing.T) {
 			name:      "string comparison",
 			condition: "status == 'completed'",
 			setup: func(gctx GlobalContext) {
-				gctx.Set("status", "completed")
+				gctx.Set(context.Background(), "status", "completed")
 			},
 			expected: true,
 		},
@@ -50,12 +52,14 @@ func TestEvaluateCondition(t *testing.T) {
 			condition: "missing == true",
 			setup:     func(gctx GlobalContext) {},
 			expected:  false,
+			wantErr:   false, // expr evaluates nil == true as false without error
 		},
 		{
 			name:      "invalid syntax",
 			condition: "!!!invalid!!!",
 			setup:     func(gctx GlobalContext) {},
 			expected:  false,
+			wantErr:   true,
 		},
 	}
 
@@ -68,9 +72,14 @@ func TestEvaluateCondition(t *testing.T) {
 				return nil
 			}
 			gctx := NewMapContext(loadFn, saveFn)
-			_ = gctx.Load("test")
+			_ = gctx.Load(context.Background(), "test")
 			tt.setup(gctx)
-			result := EvaluateCondition(tt.condition, gctx)
+			result, err := EvaluateCondition(tt.condition, gctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -81,14 +90,14 @@ type trackMockContext struct {
 	data          map[string]interface{}
 }
 
-func (m *trackMockContext) Load(id string) error { return nil }
+func (m *trackMockContext) Load(_ context.Context, _ string) error { return nil }
 func (m *trackMockContext) Get(key string) interface{} {
 	m.requestedKeys = append(m.requestedKeys, key)
 	return m.data[key]
 }
-func (m *trackMockContext) Set(key string, val interface{}) {}
-func (m *trackMockContext) GetTokens() []Token              { return nil }
-func (m *trackMockContext) SetTokens(tokens []Token)        {}
+func (m *trackMockContext) Set(_ context.Context, _ string, _ interface{}) {}
+func (m *trackMockContext) GetTokens() []Token                             { return nil }
+func (m *trackMockContext) SetTokens(_ context.Context, _ []Token)         {}
 
 func TestEvaluateCondition_DynamicExtraction(t *testing.T) {
 	mock := &trackMockContext{
@@ -100,7 +109,8 @@ func TestEvaluateCondition_DynamicExtraction(t *testing.T) {
 		},
 	}
 
-	result := EvaluateCondition("ok == true && count > 5 && tax < 20", mock)
+	result, err := EvaluateCondition("ok == true && count > 5 && tax < 20", mock)
+	assert.NoError(t, err)
 	assert.True(t, result)
 
 	assert.Contains(t, mock.requestedKeys, "ok")

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"sync"
 )
 
@@ -28,17 +29,15 @@ type Token struct {
 // It allows for different backends (e.g., in-memory map, database) to store the state.
 type GlobalContext interface {
 	// Load retrieves the context for a given ID.
-	Load(id string) error
+	Load(ctx context.Context, id string) error
 	// Get retrieves the value for a given key from the context.
 	Get(key string) interface{}
-	// Set stores a value for a given key in the context and triggers an implicit save.
-	// TODO: we might want to avoid implicit saving for perf reasons, and instead have a Save() method.
-	// otherwise, for example, each Set call will trigger a DB write for a DB based GlobalContext.
-	Set(key string, val interface{})
+	// Set stores a value for a given key in the context.
+	Set(ctx context.Context, key string, val interface{})
 	// GetTokens returns the current tokens in the context.
 	GetTokens() []Token
-	// SetTokens updates the tokens in the context and triggers an implicit save.
-	SetTokens(tokens []Token)
+	// SetTokens updates the tokens in the context.
+	SetTokens(ctx context.Context, tokens []Token)
 }
 
 // MapContext is an in-memory implementation of GlobalContext using a map.
@@ -63,8 +62,19 @@ func NewMapContext(loadFn func(string) (map[string]interface{}, []Token, error),
 	}
 }
 
+// NewMapContextWithID initializes a new MapContext pre-loaded with an instance ID and ready for use.
+// This is used when creating a new instance that hasn't been persisted yet.
+func NewMapContextWithID(id string, loadFn func(string) (map[string]interface{}, []Token, error), saveFn func(string, map[string]interface{}, []Token) error) *MapContext {
+	return &MapContext{
+		id:     id,
+		data:   make(map[string]interface{}),
+		loadFn: loadFn,
+		saveFn: saveFn,
+	}
+}
+
 // Load retrieves the context for a given ID.
-func (m *MapContext) Load(id string) error {
+func (m *MapContext) Load(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.id = id
@@ -90,7 +100,7 @@ func (m *MapContext) Get(key string) interface{} {
 }
 
 // Set stores a value for a given key in the context and triggers an implicit save.
-func (m *MapContext) Set(key string, val interface{}) {
+func (m *MapContext) Set(_ context.Context, key string, val interface{}) {
 	m.mu.Lock()
 	if m.data == nil {
 		m.data = make(map[string]interface{})
@@ -110,7 +120,7 @@ func (m *MapContext) GetTokens() []Token {
 }
 
 // SetTokens updates the tokens in the context and triggers an implicit save.
-func (m *MapContext) SetTokens(tokens []Token) {
+func (m *MapContext) SetTokens(_ context.Context, tokens []Token) {
 	m.mu.Lock()
 	m.tokens = make([]Token, len(tokens))
 	copy(m.tokens, tokens)
@@ -125,5 +135,3 @@ func (m *MapContext) triggerSave() {
 		m.saveFn(m.id, m.data, m.tokens)
 	}
 }
-
-// (Removed Data method)

@@ -41,10 +41,7 @@ func TestWorkflows(t *testing.T) {
 			repo := NewMemoryRepo()
 			mgr := NewWorkflowManager(repo)
 
-			// Cast to manager implementation to use AddWorkflow or use exported if I change it
-			if mi, ok := mgr.(*manager); ok {
-				mi.AddWorkflow(&testFile.Workflow)
-			}
+			mgr.AddWorkflow(&testFile.Workflow)
 
 			// Capture task activations
 			var mu sync.Mutex
@@ -57,11 +54,6 @@ func TestWorkflows(t *testing.T) {
 				return nil
 			})
 
-			// Helper to get nodeID from executionID (since format is inst:node:uuid)
-			// Actually, let's add a helper to TaskPayload or just split here.
-			// I'll add a helper method to TaskPayload in an update if needed,
-			// but for now I'll just split in the handler.
-
 			// Start workflow
 			instID, err := mgr.StartWorkflow(ctx, testFile.Workflow.ID, nil)
 			assert.NoError(t, err)
@@ -72,21 +64,14 @@ func TestWorkflows(t *testing.T) {
 			for _, step := range scenario.Steps {
 				// Find an activation for this nodeID that hasn't been used yet
 				var execID string
-				for {
-					mu.Lock()
-					ids := activations[step.NodeID]
-					available := len(ids) - completedSteps[step.NodeID]
-					if available > 0 {
-						execID = ids[completedSteps[step.NodeID]]
-						completedSteps[step.NodeID]++
-						mu.Unlock()
-						break
-					}
-					mu.Unlock()
-					// In a real test we'd have a timeout or wait channel,
-					// but since it's synchronous manager for now, it should be there.
-					break
+				mu.Lock()
+				ids := activations[step.NodeID]
+				available := len(ids) - completedSteps[step.NodeID]
+				if available > 0 {
+					execID = ids[completedSteps[step.NodeID]]
+					completedSteps[step.NodeID]++
 				}
+				mu.Unlock()
 
 				if execID == "" {
 					t.Fatalf("No activation found for node %s", step.NodeID)
@@ -100,7 +85,7 @@ func TestWorkflows(t *testing.T) {
 			finalInst, err := mgr.GetStatus(ctx, instID)
 			assert.NoError(t, err)
 
-			// 1. Check expected status
+			// Check expected status
 			assert.Equal(t, scenario.ExpectedStatus, finalInst.Status, "Workflow status does not match")
 
 			if finalInst.Status == StatusCompleted {
@@ -115,5 +100,3 @@ func TestWorkflows(t *testing.T) {
 		})
 	}
 }
-
-// Removed local helper

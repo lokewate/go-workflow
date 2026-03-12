@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"workflow-engine/state"
 )
@@ -27,22 +26,31 @@ func NewMemoryRepo() *MemoryRepo {
 	}
 }
 
+// NewContext creates a GlobalContext wired to this repo's persistence layer.
+func (r *MemoryRepo) NewContext(instID string) state.GlobalContext {
+	return state.NewMapContextWithID(
+		instID,
+		r.loadState(instID),
+		r.saveState(instID),
+	)
+}
+
 // Get retrieves a workflow instance by its ID.
-func (r *MemoryRepo) Get(c context.Context, id string) (*WorkflowInstance, error) {
+func (r *MemoryRepo) Get(ctx context.Context, id string) (*WorkflowInstance, error) {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
 	r.mu.RUnlock()
 
 	if !ok {
-		return nil, errors.New("instance not found")
+		return nil, ErrInstanceNotFound
 	}
 
-	// Initialize the context
+	// Wire context to the repo's persistence
 	inst.Context = state.NewMapContext(
 		r.loadState(id),
 		r.saveState(id),
 	)
-	if err := inst.Context.Load(id); err != nil {
+	if err := inst.Context.Load(ctx, id); err != nil {
 		return nil, err
 	}
 
@@ -50,16 +58,14 @@ func (r *MemoryRepo) Get(c context.Context, id string) (*WorkflowInstance, error
 }
 
 // Save persists a workflow instance.
-func (r *MemoryRepo) Save(c context.Context, inst *WorkflowInstance) error {
+func (r *MemoryRepo) Save(_ context.Context, inst *WorkflowInstance) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instances[inst.ID] = inst
 	return nil
 }
 
-// (Ensuring compatibility for Phase 2)
-
-func (r *MemoryRepo) loadState(id string) func(string) (map[string]interface{}, []state.Token, error) {
+func (r *MemoryRepo) loadState(_ string) func(string) (map[string]interface{}, []state.Token, error) {
 	return func(id string) (map[string]interface{}, []state.Token, error) {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
@@ -67,7 +73,7 @@ func (r *MemoryRepo) loadState(id string) func(string) (map[string]interface{}, 
 	}
 }
 
-func (r *MemoryRepo) saveState(id string) func(string, map[string]interface{}, []state.Token) error {
+func (r *MemoryRepo) saveState(_ string) func(string, map[string]interface{}, []state.Token) error {
 	return func(id string, data map[string]interface{}, tokens []state.Token) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()

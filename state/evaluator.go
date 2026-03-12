@@ -1,7 +1,7 @@
 package state
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/antonmedv/expr"
 	"github.com/antonmedv/expr/ast"
@@ -22,11 +22,11 @@ func (v *envVisitor) Visit(node *ast.Node) {
 }
 
 // EvaluateCondition parses and executes a boolean expression against the global context.
-// It uses the expr library for evaluation and returns false if the expression is invalid or fails.
-func EvaluateCondition(condition string, ctx GlobalContext) bool {
+// It returns the result and an error if the expression is invalid or evaluation fails.
+func EvaluateCondition(condition string, ctx GlobalContext) (bool, error) {
 	tree, err := parser.Parse(condition)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("parse condition %q: %w", condition, err)
 	}
 
 	visitor := &envVisitor{}
@@ -47,13 +47,11 @@ func EvaluateCondition(condition string, ctx GlobalContext) bool {
 
 	program, err := expr.Compile(condition, options...)
 	if err != nil {
-		log.Printf("[Evaluator]: Compile error: %v", err)
-		return false
+		return false, fmt.Errorf("compile condition %q: %w", condition, err)
 	}
 	result, err := expr.Run(program, env)
 	if err != nil {
-		log.Printf("[Evaluator]: Run error: %v", err)
-		return false
+		return false, fmt.Errorf("evaluate condition %q: %w", condition, err)
 	}
-	return result.(bool)
+	return result.(bool), nil
 }

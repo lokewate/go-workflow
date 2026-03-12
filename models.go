@@ -2,8 +2,27 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"workflow-engine/state"
+)
+
+// Sentinel errors for programmatic error handling.
+var (
+	// ErrWorkflowNotFound is returned when a workflow blueprint cannot be resolved.
+	ErrWorkflowNotFound = errors.New("workflow definition not found")
+	// ErrInstanceNotFound is returned when a workflow instance cannot be found.
+	ErrInstanceNotFound = errors.New("instance not found")
+	// ErrNodeNotFound is returned when a node ID cannot be resolved within a workflow.
+	ErrNodeNotFound = errors.New("node not found")
+	// ErrNoStartEvent is returned when a workflow has no START event node.
+	ErrNoStartEvent = errors.New("workflow has no START event")
+	// ErrInvalidExecutionID is returned when an execution ID has an invalid format.
+	ErrInvalidExecutionID = errors.New("invalid execution ID format")
+	// ErrNoMatchingCondition is returned when an ExclusiveSplit has no matching outgoing edge.
+	ErrNoMatchingCondition = errors.New("exclusive split: no condition matched")
+	// ErrHandlerNotRegistered is returned when a task is activated but no handler is registered.
+	ErrHandlerNotRegistered = errors.New("task activation handler not registered")
 )
 
 // NodeType defines the primary category of a node.
@@ -58,6 +77,8 @@ const (
 	StatusActive WorkflowStatus = "ACTIVE"
 	// StatusCompleted means the workflow has reached an END event.
 	StatusCompleted WorkflowStatus = "COMPLETED"
+	// StatusFailed means the workflow encountered an error during a transition.
+	StatusFailed WorkflowStatus = "FAILED"
 )
 
 // Node represents a single step or decision point.
@@ -153,8 +174,11 @@ func (p TaskPayload) NodeID() string {
 // TaskActivationHandler defines what happens when a TASK node is activated.
 type TaskActivationHandler func(ctx context.Context, payload TaskPayload) error
 
-// Manager provides the external interface for trigger transitions and registering for task activations.
+// Manager provides the external interface for managing workflow execution.
 type Manager interface {
+	// AddWorkflow registers a workflow blueprint with the manager.
+	AddWorkflow(wf *Workflow)
+
 	// RegisterTaskHandler defines what happens when a TASK node is activated.
 	RegisterTaskHandler(handler TaskActivationHandler)
 
