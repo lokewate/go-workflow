@@ -1,19 +1,28 @@
 package workflow
 
 import (
+	"context"
 	"workflow-engine/state"
 )
 
-// NodeType defines the kind of node in a workflow (e.g., TASK, GATEWAY).
+// NodeType defines the primary category of a node.
 type NodeType string
 
 const (
-	// NodeTypeTask represents a manual or automated task.
+	// NodeTypeTask represents an execution-driven task.
 	NodeTypeTask NodeType = "TASK"
-	// NodeTypeGateway represents a decision point or merge point.
-	NodeTypeGateway NodeType = "GATEWAY"
-	// NodeTypeEvent represents a start or end event.
-	NodeTypeEvent NodeType = "EVENT"
+	// NodeTypeInternal represents a logic-driven node (gateway or event).
+	NodeTypeInternal NodeType = "INTERNAL"
+)
+
+// InternalType specifies the logic for INTERNAL nodes.
+type InternalType string
+
+const (
+	// InternalTypeGateway defines branching or merging logic.
+	InternalTypeGateway InternalType = "GATEWAY"
+	// InternalTypeEvent defines start or termination points.
+	InternalTypeEvent InternalType = "EVENT"
 )
 
 // EventType defines the kind of event node.
@@ -26,7 +35,7 @@ const (
 	EndEvent EventType = "END"
 )
 
-// GatewayType defines the behavior of a gateway node.
+// GatewayType defines the routing behavior.
 type GatewayType string
 
 const (
@@ -50,25 +59,35 @@ const (
 	StatusCompleted WorkflowStatus = "COMPLETED"
 )
 
-// Node represents a single step or gateway in a workflow.
+// Node represents a single step or decision point.
 type Node struct {
 	// ID is the unique identifier for the node.
 	ID string `json:"id"`
-	// Type specifies whether the node is a task, gateway, or event.
+	// Type specifies whether the node is a task or internal logic.
 	Type NodeType `json:"type"`
 	// Name is a human-readable name for the node.
 	Name string `json:"name"`
-	// TaskType specifies the kind of task if Type is NodeTypeTask.
-	TaskType string `json:"task_type,omitempty"`
-	// EventType specifies the kind of event if Type is NodeTypeEvent.
-	EventType EventType `json:"event_type,omitempty"`
-	// GatewayType specifies the behavior if Type is NodeTypeGateway.
+
+	// Internal Logic
+	// InternalType specifies if it's a gateway or event (for INTERNAL type).
+	InternalType InternalType `json:"internal_type,omitempty"`
+	// GatewayType specifies the routing behavior (for GATEWAY internal type).
 	GatewayType GatewayType `json:"gateway_type,omitempty"`
-	// Outputs defines the mapping from local task results to global context keys.
-	Outputs map[string]string `json:"outputs,omitempty"`
-	// X is the horizontal position of the node in a visual editor.
+	// EventType specifies the event behavior (for EVENT internal type).
+	EventType EventType `json:"event_type,omitempty"`
+
+	// Task Logic
+	// TaskID is the identifier used by the TaskManager to locate the execution logic.
+	TaskID string `json:"task_id,omitempty"`
+
+	// Mapping Logic: Prevents variable leakage.
+	// InputMapping: Map[LocalTaskVar] -> GlobalContextKey
+	InputMapping map[string]string `json:"input_mapping,omitempty"`
+	// OutputMapping: Map[LocalTaskVar] -> GlobalContextKey
+	OutputMapping map[string]string `json:"output_mapping,omitempty"`
+
+	// Visualization helpers
 	X int `json:"x"`
-	// Y is the vertical position of the node in a visual editor.
 	Y int `json:"y"`
 }
 
@@ -106,4 +125,33 @@ type WorkflowInstance struct {
 	Status WorkflowStatus `json:"status"`
 	// Context holds the dynamic state and tokens for this instance.
 	Context state.GlobalContext `json:"-"`
+}
+
+// TaskPayload contains the information provided to the orchestrator
+// to trigger a specific task execution.
+type TaskPayload struct {
+	// ExecutionID is a unique identifier for this specific task activation.
+	ExecutionID string
+	// TaskID identifies which task needs to be executed.
+	TaskID string
+	// Inputs is the set of data from the global context mapping to the task.
+	Inputs map[string]any
+}
+
+// TaskActivationHandler defines what happens when a TASK node is activated.
+type TaskActivationHandler func(ctx context.Context, payload TaskPayload) error
+
+// Manager provides the external interface for trigger transitions and registering for task activations.
+type Manager interface {
+	// RegisterTaskHandler defines what happens when a TASK node is activated.
+	RegisterTaskHandler(handler TaskActivationHandler)
+
+	// StartWorkflow creates and begins a new execution instance of a specific workflow definition.
+	StartWorkflow(ctx context.Context, workflowID string, initialCtx map[string]any) (string, error)
+
+	// TaskDone is called when a task worker finishes.
+	TaskDone(ctx context.Context, executionID string, outputs map[string]any) error
+
+	// GetStatus retrieves the current state and audit trail.
+	GetStatus(ctx context.Context, instanceID string) (*WorkflowInstance, error)
 }
