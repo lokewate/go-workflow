@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"workflow-engine/state"
+
+	"github.com/lokewate/go-workflow/state"
 
 	"github.com/google/uuid"
 )

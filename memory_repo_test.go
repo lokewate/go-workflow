@@ -3,7 +3,8 @@ package workflow
 import (
 	"context"
 	"testing"
-	"workflow-engine/state"
+
+	"github.com/lokewate/go-workflow/state"
 
 	"github.com/stretchr/testify/assert"
 )

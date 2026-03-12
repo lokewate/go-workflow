@@ -2,7 +2,8 @@ package workflow
 
 import (
 	"context"
-	"workflow-engine/state"
+
+	"github.com/lokewate/go-workflow/state"
 )
 
 // Repo defines the interface for persisting workflow instances.

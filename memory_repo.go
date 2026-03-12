@@ -3,7 +3,8 @@ package workflow
 import (
 	"context"
 	"sync"
-	"workflow-engine/state"
+
+	"github.com/lokewate/go-workflow/state"
 )
 
 // MemoryRepo implements Repo using an in-memory map.

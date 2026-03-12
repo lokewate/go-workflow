@@ -13,13 +13,20 @@ The system is divided into three distinct layers:
 
 ### 1. Initialize the Manager
 
-The Manager requires a `Repository` to persist workflow instances.
+The Manager requires a `Repository` to persist workflow instances. You can also configure a custom structured logger.
 
 ```go
-import "github.com/your-org/go-workflow"
+import (
+    "log/slog"
+    "os"
+    "github.com/lokewate/go-workflow"
+)
 
-repo := workflow.NewMemoryRepo() // Or your custom DB implementation
-wm := workflow.NewWorkflowManager(repo)
+repo := workflow.NewMemoryRepo() 
+
+// Optional: Use a custom slog logger
+logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+wm := workflow.NewWorkflowManager(repo, workflow.WithLogger(logger))
 ```
 
 ### 2. Register a Task Handler (The Orchestrator)
@@ -28,9 +35,9 @@ The Orchestrator defines how the Manager interacts with your task execution syst
 
 ```go
 wm.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
-    // The Manager provides a unique ExecutionID. 
+    // The Manager provides a unique ExecutionID (format: instanceID:nodeID:uuid). 
     // Dispatch this task to your worker system (e.g., Temporal, Kafka, or simple Go routine).
-    log.Printf("Executing task %s with inputs %v", payload.TaskID, payload.Inputs)
+    slog.Info("Executing task", "taskID", payload.TaskID, "execID", payload.ExecutionID)
     
     // Once the task is done, call wm.TaskDone(ctx, payload.ExecutionID, results)
     return nil
@@ -57,12 +64,13 @@ blueprint := &workflow.Workflow{
             Type: workflow.NodeTypeTask,
             TaskID: "send_email",
             InputMapping: map[string]string{
-                "email_address": "user_email",
+                "email_address": "user_email", // Map GlobalContextKey to LocalTaskVar
             },
         },
-        // ... more nodes
     },
-    // ... edges
+    Edges: []workflow.Edge{
+        {ID: "e1", SourceID: "start", TargetID: "welcome_email"},
+    },
 }
 
 wm.AddWorkflow(blueprint)
@@ -75,7 +83,8 @@ initialCtx := map[string]any{
     "user_email": "hello@example.com",
 }
 
-instanceID, err := wm.StartWorkflow(ctx, "user_onboarding", initialCtx)
+// StartWorkflow returns the InstanceID
+instanceID, err := wm.StartWorkflow(context.Background(), "user_onboarding", initialCtx)
 ```
 
 ### 5. Completing Tasks
@@ -87,8 +96,14 @@ results := map[string]any{
     "status": "sent",
 }
 
-err := wm.TaskDone(ctx, executionID, results)
+err := wm.TaskDone(context.Background(), executionID, results)
 ```
+
+## Workflow Statuses
+
+- `StatusActive`: The workflow is currently running and has active tokens.
+- `StatusCompleted`: The workflow has reached an `END` event.
+- `StatusFailed`: The workflow encountered an error (e.g., no matching condition in an Exclusive Split) and has stopped.
 
 ## System Integrity Rules
 

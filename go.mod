@@ -1,4 +1,4 @@
-module workflow-engine
+module github.com/lokewate/go-workflow
 
 go 1.21
 

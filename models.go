@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"workflow-engine/state"
+
+	"github.com/lokewate/go-workflow/state"
 )
 
 // Sentinel errors for programmatic error handling.
