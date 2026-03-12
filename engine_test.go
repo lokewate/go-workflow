@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,64 +39,73 @@ func TestWorkflows(t *testing.T) {
 		t.Run(scenario.Name, func(t *testing.T) {
 			ctx := context.Background()
 			repo := NewMemoryRepo()
-			engine := &Engine{
-				Repo:     repo,
-				Workflow: &testFile.Workflow,
+			mgr := NewWorkflowManager(repo)
+
+			// Cast to manager implementation to use AddWorkflow or use exported if I change it
+			if mi, ok := mgr.(*manager); ok {
+				mi.AddWorkflow(&testFile.Workflow)
 			}
 
-			// Initialize instance
-			instID := "test-instance"
-			inst := &WorkflowInstance{
-				ID: instID,
-			}
-			repo.Save(ctx, inst)
-			inst, _ = repo.Get(ctx, instID)
+			// Capture task activations
+			var mu sync.Mutex
+			activations := make(map[string][]string) // NodeID -> []ExecutionID
 
-			// Start workflow from the START node
-			err = engine.StartWorkflow(ctx, inst, "start")
+			mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+				mu.Lock()
+				defer mu.Unlock()
+				activations[payload.NodeID()] = append(activations[payload.NodeID()], payload.ExecutionID)
+				return nil
+			})
+
+			// Helper to get nodeID from executionID (since format is inst:node:uuid)
+			// Actually, let's add a helper to TaskPayload or just split here.
+			// I'll add a helper method to TaskPayload in an update if needed,
+			// but for now I'll just split in the handler.
+
+			// Start workflow
+			instID, err := mgr.StartWorkflow(ctx, testFile.Workflow.ID, nil)
 			assert.NoError(t, err)
 
-			// Execute mock task completions defined in JSON
-			// (Any START nodes in steps should be skipped as they no longer accept CompleteTask)
+			// Process steps
+			completedSteps := make(map[string]int) // NodeID -> Count
+
 			for _, step := range scenario.Steps {
-				if step.NodeID == "start" {
-					// We can put results into the context manually, simulating payload args
-					for k, v := range step.Results {
-						inst.Context.Set(k, v)
+				// Find an activation for this nodeID that hasn't been used yet
+				var execID string
+				for {
+					mu.Lock()
+					ids := activations[step.NodeID]
+					available := len(ids) - completedSteps[step.NodeID]
+					if available > 0 {
+						execID = ids[completedSteps[step.NodeID]]
+						completedSteps[step.NodeID]++
+						mu.Unlock()
+						break
 					}
-					// Auto-save these results
-					repo.Save(ctx, inst)
-					continue
+					mu.Unlock()
+					// In a real test we'd have a timeout or wait channel,
+					// but since it's synchronous manager for now, it should be there.
+					break
 				}
-				err := engine.CompleteTask(ctx, instID, step.NodeID, step.Results)
-				assert.NoError(t, err, "Failed completing step: %s", step.NodeID)
+
+				if execID == "" {
+					t.Fatalf("No activation found for node %s", step.NodeID)
+				}
+
+				err := mgr.TaskDone(ctx, execID, step.Results)
+				assert.NoError(t, err)
 			}
 
 			// Verify final state
-			finalInst, _ := repo.Get(ctx, instID)
+			finalInst, err := mgr.GetStatus(ctx, instID)
+			assert.NoError(t, err)
 
 			// 1. Check expected status
-			if scenario.ExpectedStatus != "" {
-				assert.Equal(t, scenario.ExpectedStatus, finalInst.Status, "Workflow status does not match")
-			} else {
-				// Fallback to expecting completed if "end" is in tokens
-				expectComplete := false
-				for _, expTok := range scenario.ExpectedTokens {
-					if expTok == "end" {
-						expectComplete = true
-						break
-					}
-				}
-				if expectComplete {
-					assert.Equal(t, "COMPLETED", finalInst.Status, "Workflow should be COMPLETED")
-				}
-			}
+			assert.Equal(t, scenario.ExpectedStatus, finalInst.Status, "Workflow status does not match")
 
-			if finalInst.Status == "COMPLETED" {
-				// 2. Check Tokens (should be empty for COMPLETED)
+			if finalInst.Status == StatusCompleted {
 				assert.Empty(t, finalInst.Context.GetTokens(), "Tokens should be empty after completion")
 			} else {
-				// 1. Check Tokens for partial completion
 				var actualTokenNodes []string
 				for _, tok := range finalInst.Context.GetTokens() {
 					actualTokenNodes = append(actualTokenNodes, tok.NodeID)
@@ -105,3 +115,5 @@ func TestWorkflows(t *testing.T) {
 		})
 	}
 }
+
+// Removed local helper

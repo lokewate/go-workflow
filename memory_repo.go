@@ -57,6 +57,8 @@ func (r *MemoryRepo) Save(c context.Context, inst *WorkflowInstance) error {
 	return nil
 }
 
+// (Ensuring compatibility for Phase 2)
+
 func (r *MemoryRepo) loadState(id string) func(string) (map[string]interface{}, []state.Token, error) {
 	return func(id string) (map[string]interface{}, []state.Token, error) {
 		r.mu.RLock()
