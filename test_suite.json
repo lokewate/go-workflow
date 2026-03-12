@@ -6,7 +6,8 @@
         "nodes": [
             {
                 "id": "start",
-                "type": "EVENT",
+                "type": "INTERNAL",
+                "internal_type": "EVENT",
                 "event_type": "START",
                 "name": "Start Process",
                 "x": 0,
@@ -15,8 +16,9 @@
             {
                 "id": "task_init",
                 "type": "TASK",
+                "task_id": "init_task",
                 "name": "Initialize Payload",
-                "outputs": {
+                "output_mapping": {
                     "ok": "ok"
                 },
                 "x": 150,
@@ -24,23 +26,26 @@
             },
             {
                 "id": "split",
-                "type": "GATEWAY",
-                "name": "Evaluation Gateway",
+                "type": "INTERNAL",
+                "internal_type": "GATEWAY",
                 "gateway_type": "EXCLUSIVE_SPLIT",
+                "name": "Evaluation Gateway",
                 "x": 300,
                 "y": 150
             },
             {
                 "id": "p_split",
-                "type": "GATEWAY",
-                "name": "Parallel Split",
+                "type": "INTERNAL",
+                "internal_type": "GATEWAY",
                 "gateway_type": "PARALLEL_SPLIT",
+                "name": "Parallel Split",
                 "x": 450,
                 "y": 50
             },
             {
                 "id": "t1",
                 "type": "TASK",
+                "task_id": "parallel_task_1",
                 "name": "Parallel Task 1",
                 "x": 600,
                 "y": 0
@@ -48,36 +53,41 @@
             {
                 "id": "t2",
                 "type": "TASK",
+                "task_id": "parallel_task_2",
                 "name": "Parallel Task 2",
                 "x": 600,
                 "y": 100
             },
             {
                 "id": "p_join",
-                "type": "GATEWAY",
-                "name": "Parallel Join",
+                "type": "INTERNAL",
+                "internal_type": "GATEWAY",
                 "gateway_type": "PARALLEL_JOIN",
+                "name": "Parallel Join",
                 "x": 750,
                 "y": 50
             },
             {
                 "id": "alt_path",
                 "type": "TASK",
+                "task_id": "alt_task",
                 "name": "Alternative Path",
                 "x": 450,
                 "y": 250
             },
             {
                 "id": "e_join",
-                "type": "GATEWAY",
-                "name": "Exclusive Join",
+                "type": "INTERNAL",
+                "internal_type": "GATEWAY",
                 "gateway_type": "EXCLUSIVE_JOIN",
+                "name": "Exclusive Join",
                 "x": 900,
                 "y": 150
             },
             {
                 "id": "end",
-                "type": "EVENT",
+                "type": "INTERNAL",
+                "internal_type": "EVENT",
                 "event_type": "END",
                 "name": "End Process",
                 "x": 1050,

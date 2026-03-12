@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"strings"
 	"workflow-engine/state"
 )
 
@@ -121,6 +122,8 @@ type Workflow struct {
 type WorkflowInstance struct {
 	// ID is the unique identifier for this specific execution instance.
 	ID string `json:"id"`
+	// WorkflowID is the ID of the blueprint this instance is pinned to.
+	WorkflowID string `json:"workflow_id"`
 	// Status tracks the current state of the instance.
 	Status WorkflowStatus `json:"status"`
 	// Context holds the dynamic state and tokens for this instance.
@@ -136,6 +139,15 @@ type TaskPayload struct {
 	TaskID string
 	// Inputs is the set of data from the global context mapping to the task.
 	Inputs map[string]any
+}
+
+// NodeID returns the node part of the ExecutionID.
+func (p TaskPayload) NodeID() string {
+	parts := strings.Split(p.ExecutionID, ":")
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	return ""
 }
 
 // TaskActivationHandler defines what happens when a TASK node is activated.
