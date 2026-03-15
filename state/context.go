@@ -31,15 +31,15 @@ type GlobalContext interface {
 	// Load retrieves the context for a given ID.
 	Load(ctx context.Context, id string) error
 	// Get retrieves the value for a given key from the context.
-	Get(key string) interface{}
+	Get(key string) any
 	// Set stores a value for a given key in the context.
-	Set(ctx context.Context, key string, val interface{})
+	Set(ctx context.Context, key string, val any)
 	// GetTokens returns the current tokens in the context.
 	GetTokens() []Token
 	// SetTokens updates the tokens in the context.
 	SetTokens(ctx context.Context, tokens []Token)
 	// GetAll returns the entire context data as a map.
-	GetAll() map[string]interface{}
+	GetAll() map[string]any
 }
 
 // MapContext is an in-memory implementation of GlobalContext using a map.
@@ -47,17 +47,17 @@ type MapContext struct {
 	mu sync.RWMutex
 	id string
 	// data holds the workflow-wide variables and their values.
-	data map[string]interface{}
+	data map[string]any
 	// tokens tracks the current execution markers in the workflow.
 	tokens []Token
 	// saveFn handles persistence. It's called internally on every mutation.
-	saveFn func(id string, data map[string]interface{}, tokens []Token) error
+	saveFn func(id string, data map[string]any, tokens []Token) error
 	// loadFn retrieves data for a given ID.
-	loadFn func(id string) (map[string]interface{}, []Token, error)
+	loadFn func(id string) (map[string]any, []Token, error)
 }
 
 // NewMapContext initializes a new MapContext with load and save functions.
-func NewMapContext(loadFn func(string) (map[string]interface{}, []Token, error), saveFn func(string, map[string]interface{}, []Token) error) *MapContext {
+func NewMapContext(loadFn func(string) (map[string]any, []Token, error), saveFn func(string, map[string]any, []Token) error) *MapContext {
 	return &MapContext{
 		loadFn: loadFn,
 		saveFn: saveFn,
@@ -66,10 +66,10 @@ func NewMapContext(loadFn func(string) (map[string]interface{}, []Token, error),
 
 // NewMapContextWithID initializes a new MapContext pre-loaded with an instance ID and ready for use.
 // This is used when creating a new instance that hasn't been persisted yet.
-func NewMapContextWithID(id string, loadFn func(string) (map[string]interface{}, []Token, error), saveFn func(string, map[string]interface{}, []Token) error) *MapContext {
+func NewMapContextWithID(id string, loadFn func(string) (map[string]any, []Token, error), saveFn func(string, map[string]any, []Token) error) *MapContext {
 	return &MapContext{
 		id:     id,
-		data:   make(map[string]interface{}),
+		data:   make(map[string]any),
 		loadFn: loadFn,
 		saveFn: saveFn,
 	}
@@ -87,7 +87,7 @@ func (m *MapContext) Load(_ context.Context, id string) error {
 		}
 		m.data = data
 		if m.data == nil {
-			m.data = make(map[string]interface{})
+			m.data = make(map[string]any)
 		}
 		m.tokens = tokens
 	}
@@ -95,17 +95,17 @@ func (m *MapContext) Load(_ context.Context, id string) error {
 }
 
 // Get retrieves the value for a given key from the context.
-func (m *MapContext) Get(key string) interface{} {
+func (m *MapContext) Get(key string) any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.data[key]
 }
 
 // Set stores a value for a given key in the context and triggers an implicit save.
-func (m *MapContext) Set(_ context.Context, key string, val interface{}) {
+func (m *MapContext) Set(_ context.Context, key string, val any) {
 	m.mu.Lock()
 	if m.data == nil {
-		m.data = make(map[string]interface{})
+		m.data = make(map[string]any)
 	}
 	m.data[key] = val
 	m.mu.Unlock()
@@ -131,10 +131,10 @@ func (m *MapContext) SetTokens(_ context.Context, tokens []Token) {
 }
 
 // GetAll returns a copy of the entire context data as a map.
-func (m *MapContext) GetAll() map[string]interface{} {
+func (m *MapContext) GetAll() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	res := make(map[string]interface{}, len(m.data))
+	res := make(map[string]any, len(m.data))
 	for k, v := range m.data {
 		res[k] = v
 	}

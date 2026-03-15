@@ -13,7 +13,7 @@ type MemoryRepo struct {
 	// instances maps instance IDs to their workflow instance objects.
 	instances map[string]*WorkflowInstance
 	// data stores workflow-wide variables, indexed by instance ID.
-	data map[string]map[string]interface{}
+	data map[string]map[string]any
 	// tokens tracks current execution markers for each instance.
 	tokens map[string][]state.Token
 }
@@ -22,7 +22,7 @@ type MemoryRepo struct {
 func NewMemoryRepo() *MemoryRepo {
 	return &MemoryRepo{
 		instances: make(map[string]*WorkflowInstance),
-		data:      make(map[string]map[string]interface{}),
+		data:      make(map[string]map[string]any),
 		tokens:    make(map[string][]state.Token),
 	}
 }
@@ -66,16 +66,16 @@ func (r *MemoryRepo) Save(_ context.Context, inst *WorkflowInstance) error {
 	return nil
 }
 
-func (r *MemoryRepo) loadState(_ string) func(string) (map[string]interface{}, []state.Token, error) {
-	return func(id string) (map[string]interface{}, []state.Token, error) {
+func (r *MemoryRepo) loadState(_ string) func(string) (map[string]any, []state.Token, error) {
+	return func(id string) (map[string]any, []state.Token, error) {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
 		return r.data[id], r.tokens[id], nil
 	}
 }
 
-func (r *MemoryRepo) saveState(_ string) func(string, map[string]interface{}, []state.Token) error {
-	return func(id string, data map[string]interface{}, tokens []state.Token) error {
+func (r *MemoryRepo) saveState(_ string) func(string, map[string]any, []state.Token) error {
+	return func(id string, data map[string]any, tokens []state.Token) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.data[id] = data

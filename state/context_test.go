@@ -8,13 +8,13 @@ import (
 )
 
 func TestMapContext(t *testing.T) {
-	var savedData map[string]interface{}
+	var savedData map[string]any
 	var savedTokens []Token
 
-	loadFn := func(id string) (map[string]interface{}, []Token, error) {
+	loadFn := func(id string) (map[string]any, []Token, error) {
 		return savedData, savedTokens, nil
 	}
-	saveFn := func(id string, data map[string]interface{}, tokens []Token) error {
+	saveFn := func(id string, data map[string]any, tokens []Token) error {
 		savedData = data
 		savedTokens = tokens
 		return nil

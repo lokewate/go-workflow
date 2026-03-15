@@ -24,7 +24,7 @@ type TestScenario struct {
 
 type TestStep struct {
 	NodeID  string                 `json:"node_id"`
-	Results map[string]interface{} `json:"results"`
+	Results map[string]any `json:"results"`
 }
 
 func TestWorkflows(t *testing.T) {

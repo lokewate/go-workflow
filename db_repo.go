@@ -85,17 +85,17 @@ func (r *DBRepo) Save(ctx context.Context, inst *WorkflowInstance) error {
 	return r.db.WithContext(ctx).Save(&gormInst).Error
 }
 
-func (r *DBRepo) loadState(_ string) func(string) (map[string]interface{}, []state.Token, error) {
-	return func(id string) (map[string]interface{}, []state.Token, error) {
+func (r *DBRepo) loadState(_ string) func(string) (map[string]any, []state.Token, error) {
+	return func(id string) (map[string]any, []state.Token, error) {
 		var stateRow GormWorkflowState
 		if err := r.db.First(&stateRow, "instance_id = ?", id).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
-				return make(map[string]interface{}), []state.Token{}, nil
+				return make(map[string]any), []state.Token{}, nil
 			}
 			return nil, nil, err
 		}
 
-		var data map[string]interface{}
+		var data map[string]any
 		if len(stateRow.Data) > 0 {
 			if err := json.Unmarshal(stateRow.Data, &data); err != nil {
 				return nil, nil, fmt.Errorf("failed to unmarshal state data: %w", err)
@@ -113,8 +113,8 @@ func (r *DBRepo) loadState(_ string) func(string) (map[string]interface{}, []sta
 	}
 }
 
-func (r *DBRepo) saveState(_ string) func(string, map[string]interface{}, []state.Token) error {
-	return func(id string, data map[string]interface{}, tokens []state.Token) error {
+func (r *DBRepo) saveState(_ string) func(string, map[string]any, []state.Token) error {
+	return func(id string, data map[string]any, tokens []state.Token) error {
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
 			return fmt.Errorf("failed to marshal state data: %w", err)

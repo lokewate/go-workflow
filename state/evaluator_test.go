@@ -65,10 +65,10 @@ func TestEvaluateCondition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			loadFn := func(id string) (map[string]interface{}, []Token, error) {
-				return make(map[string]interface{}), nil, nil
+			loadFn := func(id string) (map[string]any, []Token, error) {
+				return make(map[string]any), nil, nil
 			}
-			saveFn := func(id string, data map[string]interface{}, tokens []Token) error {
+			saveFn := func(id string, data map[string]any, tokens []Token) error {
 				return nil
 			}
 			gctx := NewMapContext(loadFn, saveFn)
@@ -87,22 +87,22 @@ func TestEvaluateCondition(t *testing.T) {
 
 type trackMockContext struct {
 	requestedKeys []string
-	data          map[string]interface{}
+	data          map[string]any
 }
 
 func (m *trackMockContext) Load(_ context.Context, _ string) error { return nil }
-func (m *trackMockContext) Get(key string) interface{} {
+func (m *trackMockContext) Get(key string) any {
 	m.requestedKeys = append(m.requestedKeys, key)
 	return m.data[key]
 }
-func (m *trackMockContext) Set(_ context.Context, _ string, _ interface{}) {}
+func (m *trackMockContext) Set(_ context.Context, _ string, _ any) {}
 func (m *trackMockContext) GetTokens() []Token                             { return nil }
 func (m *trackMockContext) SetTokens(_ context.Context, _ []Token)         {}
-func (m *trackMockContext) GetAll() map[string]interface{}                 { return m.data }
+func (m *trackMockContext) GetAll() map[string]any                 { return m.data }
 
 func TestEvaluateCondition_DynamicExtraction(t *testing.T) {
 	mock := &trackMockContext{
-		data: map[string]interface{}{
+		data: map[string]any{
 			"ok":     true,
 			"count":  10,
 			"unused": "ignored",

@@ -33,7 +33,7 @@ func EvaluateCondition(condition string, ctx GlobalContext) (bool, error) {
 	ast.Walk(&tree.Node, visitor)
 
 	// Build the minimal environment dynamically
-	env := make(map[string]interface{})
+	env := make(map[string]any)
 
 	for key := range visitor.keys {
 		env[key] = ctx.Get(key)
