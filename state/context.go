@@ -38,6 +38,8 @@ type GlobalContext interface {
 	GetTokens() []Token
 	// SetTokens updates the tokens in the context.
 	SetTokens(ctx context.Context, tokens []Token)
+	// GetAll returns the entire context data as a map.
+	GetAll() map[string]interface{}
 }
 
 // MapContext is an in-memory implementation of GlobalContext using a map.
@@ -126,6 +128,17 @@ func (m *MapContext) SetTokens(_ context.Context, tokens []Token) {
 	copy(m.tokens, tokens)
 	m.mu.Unlock()
 	m.triggerSave()
+}
+
+// GetAll returns a copy of the entire context data as a map.
+func (m *MapContext) GetAll() map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	res := make(map[string]interface{}, len(m.data))
+	for k, v := range m.data {
+		res[k] = v
+	}
+	return res
 }
 
 func (m *MapContext) triggerSave() {

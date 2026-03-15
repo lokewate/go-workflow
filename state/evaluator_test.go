@@ -98,6 +98,7 @@ func (m *trackMockContext) Get(key string) interface{} {
 func (m *trackMockContext) Set(_ context.Context, _ string, _ interface{}) {}
 func (m *trackMockContext) GetTokens() []Token                             { return nil }
 func (m *trackMockContext) SetTokens(_ context.Context, _ []Token)         {}
+func (m *trackMockContext) GetAll() map[string]interface{}                 { return m.data }
 
 func TestEvaluateCondition_DynamicExtraction(t *testing.T) {
 	mock := &trackMockContext{
