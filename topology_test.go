@@ -41,7 +41,8 @@ func TestWorkflows(t *testing.T) {
 			repo := NewMemoryRepo()
 			mgr := NewWorkflowManager(repo)
 
-			mgr.AddWorkflow(&testFile.Workflow)
+			wfBytes, err := json.Marshal(&testFile.Workflow)
+			assert.NoError(t, err)
 
 			// Capture task activations
 			var mu sync.Mutex
@@ -55,7 +56,7 @@ func TestWorkflows(t *testing.T) {
 			})
 
 			// Start workflow
-			instID, err := mgr.StartWorkflow(ctx, testFile.Workflow.ID, nil)
+			instID, err := mgr.StartWorkflow(ctx, wfBytes, nil)
 			assert.NoError(t, err)
 
 			// Process steps

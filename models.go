@@ -175,19 +175,26 @@ func (p TaskPayload) NodeID() string {
 // TaskActivationHandler defines what happens when a TASK node is activated.
 type TaskActivationHandler func(ctx context.Context, payload TaskPayload) error
 
+// WorkflowCompletionHandler is called when the workflow reaches an end state (i.e. COMPLETED or FAILED).
+type WorkflowCompletionHandler func(ctx context.Context, instance *WorkflowInstance) error
+
 // Manager provides the external interface for managing workflow execution.
 type Manager interface {
-	// AddWorkflow registers a workflow blueprint with the manager.
-	AddWorkflow(wf *Workflow)
-
-	// RegisterTaskHandler defines what happens when a TASK node is activated.
+	// RegisterTaskHandler allows a single global handler to be registered.
+	// This handler will get called when any Task needs to be executed.
 	RegisterTaskHandler(handler TaskActivationHandler)
 
-	// StartWorkflow creates and begins a new execution instance of a specific workflow definition.
-	StartWorkflow(ctx context.Context, workflowID string, initialCtx map[string]any) (string, error)
+	// RegisterWorkflowCompletionHandler registers a callback for when the entire workflow finishes.
+	RegisterWorkflowCompletionHandler(handler WorkflowCompletionHandler)
 
-	// TaskDone is called when a task worker finishes.
-	TaskDone(ctx context.Context, executionID string, outputs map[string]any) error
+	// StartWorkflow takes a workflow definition and executes it.
+	// initialContext is used to populate the global state managed by the Manager.
+	// Returns the ID assigned to this workflow instance.
+	StartWorkflow(ctx context.Context, workflowJSON []byte, initialContext map[string]any) (string, error)
+
+	// TaskDone should be called when a task worker finishes.
+	// taskExecutionID is the unique reference provided in the TaskPayload when the task was activated.
+	TaskDone(ctx context.Context, taskExecutionID string, outputs map[string]any) error
 
 	// GetStatus retrieves the current state and audit trail.
 	GetStatus(ctx context.Context, instanceID string) (*WorkflowInstance, error)

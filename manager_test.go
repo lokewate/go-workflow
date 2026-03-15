@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -91,10 +92,9 @@ func parallelWorkflow() *Workflow {
 }
 
 // newTestManager creates a manager with a handler that captures activations.
-func newTestManager(wf *Workflow) (Manager, *activationTracker) {
+func newTestManager() (Manager, *activationTracker) {
 	repo := NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
-	mgr.AddWorkflow(wf)
 
 	tracker := &activationTracker{
 		payloads: make(map[string][]TaskPayload),
@@ -108,6 +108,12 @@ func newTestManager(wf *Workflow) (Manager, *activationTracker) {
 	})
 
 	return mgr, tracker
+}
+
+func wfJSON(t *testing.T, wf *Workflow) []byte {
+	b, err := json.Marshal(wf)
+	require.NoError(t, err)
+	return b
 }
 
 type activationTracker struct {
@@ -135,13 +141,12 @@ func (t *activationTracker) getPayload(nodeID string, index int) TaskPayload {
 // Error Path Tests
 // ============================================================
 
-func TestStartWorkflow_ErrWorkflowNotFound(t *testing.T) {
+func TestStartWorkflow_ErrInvalidJSON(t *testing.T) {
 	repo := NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
-	_, err := mgr.StartWorkflow(context.Background(), "nonexistent", nil)
+	_, err := mgr.StartWorkflow(context.Background(), []byte("invalid-json"), nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrWorkflowNotFound))
 }
 
 func TestStartWorkflow_ErrNoStartEvent(t *testing.T) {
@@ -160,9 +165,7 @@ func TestStartWorkflow_ErrNoStartEvent(t *testing.T) {
 			{ID: "e1", SourceID: "task_a", TargetID: "end"},
 		},
 	}
-	mgr.AddWorkflow(wf)
-
-	_, err := mgr.StartWorkflow(context.Background(), "no_start", nil)
+	_, err := mgr.StartWorkflow(context.Background(), wfJSON(t, wf), nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrNoStartEvent))
 }
@@ -170,16 +173,15 @@ func TestStartWorkflow_ErrNoStartEvent(t *testing.T) {
 func TestStartWorkflow_ErrHandlerNotRegistered(t *testing.T) {
 	repo := NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
-	mgr.AddWorkflow(simpleLinearWorkflow())
 
 	// Don't register a handler — StartWorkflow should fail when it hits the task node
-	_, err := mgr.StartWorkflow(context.Background(), "linear", nil)
+	_, err := mgr.StartWorkflow(context.Background(), wfJSON(t, simpleLinearWorkflow()), nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrHandlerNotRegistered))
 }
 
 func TestTaskDone_ErrInvalidExecutionID(t *testing.T) {
-	mgr, _ := newTestManager(simpleLinearWorkflow())
+	mgr, _ := newTestManager()
 
 	err := mgr.TaskDone(context.Background(), "bad-format-no-colon", nil)
 	require.Error(t, err)
@@ -187,7 +189,7 @@ func TestTaskDone_ErrInvalidExecutionID(t *testing.T) {
 }
 
 func TestTaskDone_ErrInstanceNotFound(t *testing.T) {
-	mgr, _ := newTestManager(simpleLinearWorkflow())
+	mgr, _ := newTestManager()
 
 	err := mgr.TaskDone(context.Background(), "nonexistent-instance:some-node:some-uuid", nil)
 	require.Error(t, err)
@@ -195,7 +197,7 @@ func TestTaskDone_ErrInstanceNotFound(t *testing.T) {
 }
 
 func TestGetStatus_ErrInstanceNotFound(t *testing.T) {
-	mgr, _ := newTestManager(simpleLinearWorkflow())
+	mgr, _ := newTestManager()
 
 	inst, err := mgr.GetStatus(context.Background(), "does-not-exist")
 	require.Error(t, err)
@@ -229,8 +231,8 @@ func TestExclusiveSplit_ErrNoMatchingCondition(t *testing.T) {
 		},
 	}
 
-	mgr, tracker := newTestManager(wf)
-	instID, err := mgr.StartWorkflow(ctx, "no_match", nil)
+	mgr, tracker := newTestManager()
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, wf), nil)
 	require.NoError(t, err)
 
 	// Complete task_init with status="pending" — neither condition matches
@@ -251,9 +253,9 @@ func TestExclusiveSplit_ErrNoMatchingCondition(t *testing.T) {
 
 func TestIdempotency_DuplicateTaskDone(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	_, err := mgr.StartWorkflow(ctx, "linear", map[string]any{"global_input": "hello"})
+	_, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{"global_input": "hello"})
 	require.NoError(t, err)
 
 	execID := tracker.getExecID("task_a", 0)
@@ -273,7 +275,6 @@ func TestInputMapping(t *testing.T) {
 	wf := simpleLinearWorkflow()
 	repo := NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
-	mgr.AddWorkflow(wf)
 
 	var capturedPayload TaskPayload
 	mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
@@ -281,7 +282,7 @@ func TestInputMapping(t *testing.T) {
 		return nil
 	})
 
-	_, err := mgr.StartWorkflow(ctx, "linear", map[string]any{
+	_, err := mgr.StartWorkflow(ctx, wfJSON(t, wf), map[string]any{
 		"global_input": "mapped_value",
 	})
 	require.NoError(t, err)
@@ -294,9 +295,9 @@ func TestInputMapping(t *testing.T) {
 
 func TestOutputMapping(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "linear", map[string]any{
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{
 		"global_input": "hello",
 	})
 	require.NoError(t, err)
@@ -317,9 +318,9 @@ func TestOutputMapping(t *testing.T) {
 
 func TestOutputMapping_IgnoresUnmappedKeys(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "linear", map[string]any{
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{
 		"global_input": "hello",
 	})
 	require.NoError(t, err)
@@ -340,9 +341,9 @@ func TestOutputMapping_IgnoresUnmappedKeys(t *testing.T) {
 
 func TestConcurrentTaskDone_SameInstance(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(parallelWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "parallel", nil)
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, parallelWorkflow()), nil)
 	require.NoError(t, err)
 
 	execA := tracker.getExecID("task_a", 0)
@@ -381,7 +382,6 @@ func TestConcurrentTaskDone_DifferentInstances(t *testing.T) {
 	wf := simpleLinearWorkflow()
 	repo := NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
-	mgr.AddWorkflow(wf)
 
 	var mu sync.Mutex
 	activations := make(map[string]string) // instanceID -> executionID (since each only has one task)
@@ -399,8 +399,9 @@ func TestConcurrentTaskDone_DifferentInstances(t *testing.T) {
 	instIDs := make([]string, numInstances)
 	execIDs := make([]string, numInstances)
 
+	wfBytes := wfJSON(t, wf)
 	for i := 0; i < numInstances; i++ {
-		id, err := mgr.StartWorkflow(ctx, "linear", map[string]any{
+		id, err := mgr.StartWorkflow(ctx, wfBytes, map[string]any{
 			"global_input": i,
 		})
 		require.NoError(t, err)
@@ -448,9 +449,9 @@ func TestConcurrentTaskDone_DifferentInstances(t *testing.T) {
 
 func TestStartWorkflow_NilInitialContext(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "linear", nil)
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), nil)
 	require.NoError(t, err)
 
 	// Should still activate the task, just with nil/empty inputs
@@ -468,9 +469,9 @@ func TestStartWorkflow_NilInitialContext(t *testing.T) {
 
 func TestTaskDone_EmptyOutputs(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "linear", map[string]any{"global_input": "v"})
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{"global_input": "v"})
 	require.NoError(t, err)
 
 	execID := tracker.getExecID("task_a", 0)
@@ -487,9 +488,9 @@ func TestTaskDone_EmptyOutputs(t *testing.T) {
 
 func TestTaskDone_EmptyOutputsMap(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
-	instID, err := mgr.StartWorkflow(ctx, "linear", map[string]any{"global_input": "v"})
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{"global_input": "v"})
 	require.NoError(t, err)
 
 	execID := tracker.getExecID("task_a", 0)
@@ -525,10 +526,10 @@ func TestExclusiveSplit_DefaultEdge(t *testing.T) {
 		},
 	}
 
-	mgr, tracker := newTestManager(wf)
+	mgr, tracker := newTestManager()
 
 	// Start — no matching condition, but default edge should fire
-	instID, err := mgr.StartWorkflow(ctx, "default_edge", map[string]any{
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, wf), map[string]any{
 		"status": "pending",
 	})
 	require.NoError(t, err)
@@ -553,8 +554,6 @@ func TestMultipleBlueprints(t *testing.T) {
 
 	wfA := simpleLinearWorkflow()
 	wfB := parallelWorkflow()
-	mgr.AddWorkflow(wfA)
-	mgr.AddWorkflow(wfB)
 
 	var mu sync.Mutex
 	taskIDs := make(map[string]int) // TaskID -> count
@@ -567,10 +566,10 @@ func TestMultipleBlueprints(t *testing.T) {
 	})
 
 	// Start both workflows
-	_, err := mgr.StartWorkflow(ctx, "linear", map[string]any{"global_input": "v"})
+	_, err := mgr.StartWorkflow(ctx, wfJSON(t, wfA), map[string]any{"global_input": "v"})
 	require.NoError(t, err)
 
-	_, err = mgr.StartWorkflow(ctx, "parallel", nil)
+	_, err = mgr.StartWorkflow(ctx, wfJSON(t, wfB), nil)
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -609,8 +608,8 @@ func TestStatusFailed_PersistedToRepo(t *testing.T) {
 		},
 	}
 
-	mgr, tracker := newTestManager(wf)
-	instID, err := mgr.StartWorkflow(ctx, "will_fail", nil)
+	mgr, tracker := newTestManager()
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, wf), nil)
 	require.NoError(t, err)
 
 	execID := tracker.getExecID("task_init", 0)
@@ -646,10 +645,10 @@ func TestTaskPayload_NodeID(t *testing.T) {
 
 func TestLinearWorkflow_FullLifecycle(t *testing.T) {
 	ctx := context.Background()
-	mgr, tracker := newTestManager(simpleLinearWorkflow())
+	mgr, tracker := newTestManager()
 
 	// Start
-	instID, err := mgr.StartWorkflow(ctx, "linear", map[string]any{
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), map[string]any{
 		"global_input": "test_value",
 	})
 	require.NoError(t, err)
@@ -677,4 +676,40 @@ func TestLinearWorkflow_FullLifecycle(t *testing.T) {
 	assert.Equal(t, StatusCompleted, inst.Status)
 	assert.Empty(t, inst.Context.GetTokens())
 	assert.Equal(t, "output_value", inst.Context.Get("global_output"))
+}
+
+func TestWorkflowCompletionHandler(t *testing.T) {
+	ctx := context.Background()
+	mgr, tracker := newTestManager()
+
+	var completed atomic.Bool
+	var finalStatus WorkflowStatus
+
+	mgr.RegisterWorkflowCompletionHandler(func(ctx context.Context, inst *WorkflowInstance) error {
+		completed.Store(true)
+		finalStatus = inst.Status
+		return nil
+	})
+
+	// 1. Success Case
+	instID, err := mgr.StartWorkflow(ctx, wfJSON(t, simpleLinearWorkflow()), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, instID)
+
+	execID := tracker.getExecID("task_a", 0)
+	err = mgr.TaskDone(ctx, execID, nil)
+	require.NoError(t, err)
+
+	assert.True(t, completed.Load())
+	assert.Equal(t, StatusCompleted, finalStatus)
+
+	// 2. Failure Case
+	completed.Store(false)
+	// Create workflow that fails (no start event is easiest to fail during StartWorkflow)
+	wfFail := &Workflow{ID: "fail", Nodes: []Node{{ID: "task", Type: NodeTypeTask}}} // No start event
+	_, err = mgr.StartWorkflow(ctx, wfJSON(t, wfFail), nil)
+	require.Error(t, err)
+
+	assert.True(t, completed.Load())
+	assert.Equal(t, StatusFailed, finalStatus)
 }

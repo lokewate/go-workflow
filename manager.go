@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,10 +14,11 @@ import (
 )
 
 type manager struct {
-	repo       Repo
-	blueprints map[string]*Workflow
-	handler    TaskActivationHandler
-	logger     *slog.Logger
+	repo              Repo
+	blueprints        map[string]*Workflow
+	handler           TaskActivationHandler
+	completionHandler WorkflowCompletionHandler
+	logger            *slog.Logger
 
 	// Per-instance locks to avoid serializing all instances behind a single mutex.
 	mu    sync.Mutex             // Protects blueprints map and instanceLocks map
@@ -59,15 +61,12 @@ func (m *manager) instanceLock(instID string) *sync.Mutex {
 	return l
 }
 
-// AddWorkflow registers a workflow blueprint.
-func (m *manager) AddWorkflow(wf *Workflow) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.blueprints[wf.ID] = wf
-}
-
 func (m *manager) RegisterTaskHandler(handler TaskActivationHandler) {
 	m.handler = handler
+}
+
+func (m *manager) RegisterWorkflowCompletionHandler(handler WorkflowCompletionHandler) {
+	m.completionHandler = handler
 }
 
 func (m *manager) getNode(wf *Workflow, id string) (Node, bool) {
@@ -86,16 +85,20 @@ func (m *manager) getBlueprint(id string) (*Workflow, bool) {
 	return wf, ok
 }
 
-func (m *manager) StartWorkflow(ctx context.Context, workflowID string, initialCtx map[string]any) (string, error) {
-	wf, ok := m.getBlueprint(workflowID)
-	if !ok {
-		return "", fmt.Errorf("%w: %s", ErrWorkflowNotFound, workflowID)
+func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initialCtx map[string]any) (string, error) {
+	var wf Workflow
+	if err := json.Unmarshal(workflowJSON, &wf); err != nil {
+		return "", fmt.Errorf("invalid workflow JSON: %w", err)
 	}
+
+	m.mu.Lock()
+	m.blueprints[wf.ID] = &wf
+	m.mu.Unlock()
 
 	instID := uuid.NewString()
 	inst := &WorkflowInstance{
 		ID:         instID,
-		WorkflowID: workflowID,
+		WorkflowID: wf.ID,
 		Status:     StatusActive,
 	}
 
@@ -120,17 +123,29 @@ func (m *manager) StartWorkflow(ctx context.Context, workflowID string, initialC
 	}
 
 	if startNode == nil {
-		return "", fmt.Errorf("%w: %s", ErrNoStartEvent, workflowID)
+		inst.Status = StatusFailed
+		if err := m.repo.Save(ctx, inst); err != nil {
+			m.logger.Error("failed to save instance status on missing start node", "instanceID", inst.ID, "error", err)
+		}
+		m.finalizeWorkflow(ctx, inst)
+		return "", fmt.Errorf("%w: %s", ErrNoStartEvent, wf.ID)
 	}
 
-	m.logger.Info("starting workflow", "workflowID", workflowID, "instanceID", instID)
-	if err := m.processTarget(ctx, wf, inst, startNode.ID); err != nil {
+	m.logger.Info("starting workflow", "workflowID", wf.ID, "instanceID", instID)
+	if err := m.processTarget(ctx, &wf, inst, startNode.ID); err != nil {
 		inst.Status = StatusFailed
-		_ = m.repo.Save(ctx, inst)
+		if sErr := m.repo.Save(ctx, inst); sErr != nil {
+			m.logger.Error("failed to save instance status on processTarget error", "instanceID", inst.ID, "error", sErr)
+		}
+		m.finalizeWorkflow(ctx, inst)
 		return "", err
 	}
 
-	return instID, m.repo.Save(ctx, inst)
+	err := m.repo.Save(ctx, inst)
+	if inst.Status != StatusActive {
+		m.finalizeWorkflow(ctx, inst)
+	}
+	return instID, err
 }
 
 // TaskDone is called when a task worker finishes.
@@ -188,11 +203,26 @@ func (m *manager) TaskDone(ctx context.Context, executionID string, outputs map[
 	m.removeToken(ctx, inst, executionID)
 	if err := m.transition(ctx, wf, inst, nodeID); err != nil {
 		inst.Status = StatusFailed
-		_ = m.repo.Save(ctx, inst)
+		if sErr := m.repo.Save(ctx, inst); sErr != nil {
+			m.logger.Error("failed to save instance status on transition error", "instanceID", instID, "error", sErr)
+		}
+		m.finalizeWorkflow(ctx, inst)
 		return err
 	}
 
-	return m.repo.Save(ctx, inst)
+	err = m.repo.Save(ctx, inst)
+	if inst.Status != StatusActive {
+		m.finalizeWorkflow(ctx, inst)
+	}
+	return err
+}
+
+func (m *manager) finalizeWorkflow(ctx context.Context, inst *WorkflowInstance) {
+	if m.completionHandler != nil {
+		if err := m.completionHandler(ctx, inst); err != nil {
+			m.logger.Error("completion handler failed", "instanceID", inst.ID, "error", err)
+		}
+	}
 }
 
 func (m *manager) GetStatus(ctx context.Context, instanceID string) (*WorkflowInstance, error) {
