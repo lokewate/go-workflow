@@ -1,4 +1,4 @@
-package workflow
+package engine
 
 import (
 	"context"
@@ -8,16 +8,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lokewate/go-workflow"
 	"github.com/lokewate/go-workflow/state"
 
 	"github.com/google/uuid"
 )
 
 type manager struct {
-	repo              Repo
-	blueprints        map[string]*Workflow
-	handler           TaskActivationHandler
-	completionHandler WorkflowCompletionHandler
+	repo              workflow.Repo
+	blueprints        map[string]*workflow.Workflow
+	handler           workflow.TaskActivationHandler
+	completionHandler workflow.WorkflowCompletionHandler
 	logger            *slog.Logger
 
 	// Per-instance locks to avoid serializing all instances behind a single mutex.
@@ -26,10 +27,10 @@ type manager struct {
 }
 
 // NewWorkflowManager creates a new instance of the workflow manager.
-func NewWorkflowManager(repo Repo, opts ...ManagerOption) Manager {
+func NewWorkflowManager(repo workflow.Repo, opts ...ManagerOption) workflow.Manager {
 	m := &manager{
 		repo:       repo,
-		blueprints: make(map[string]*Workflow),
+		blueprints: make(map[string]*workflow.Workflow),
 		locks:      make(map[string]*sync.Mutex),
 		logger:     slog.Default(),
 	}
@@ -61,24 +62,24 @@ func (m *manager) instanceLock(instID string) *sync.Mutex {
 	return l
 }
 
-func (m *manager) RegisterTaskHandler(handler TaskActivationHandler) {
+func (m *manager) RegisterTaskHandler(handler workflow.TaskActivationHandler) {
 	m.handler = handler
 }
 
-func (m *manager) RegisterWorkflowCompletionHandler(handler WorkflowCompletionHandler) {
+func (m *manager) RegisterWorkflowCompletionHandler(handler workflow.WorkflowCompletionHandler) {
 	m.completionHandler = handler
 }
 
-func (m *manager) getNode(wf *Workflow, id string) (Node, bool) {
+func (m *manager) getNode(wf *workflow.Workflow, id string) (workflow.Node, bool) {
 	for _, n := range wf.Nodes {
 		if n.ID == id {
 			return n, true
 		}
 	}
-	return Node{}, false
+	return workflow.Node{}, false
 }
 
-func (m *manager) getBlueprint(id string) (*Workflow, bool) {
+func (m *manager) getBlueprint(id string) (*workflow.Workflow, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	wf, ok := m.blueprints[id]
@@ -86,7 +87,7 @@ func (m *manager) getBlueprint(id string) (*Workflow, bool) {
 }
 
 func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initialCtx map[string]any) (string, error) {
-	var wf Workflow
+	var wf workflow.Workflow
 	if err := json.Unmarshal(workflowJSON, &wf); err != nil {
 		return "", fmt.Errorf("invalid workflow JSON: %w", err)
 	}
@@ -96,10 +97,10 @@ func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initia
 	m.mu.Unlock()
 
 	instID := uuid.NewString()
-	inst := &WorkflowInstance{
+	inst := &workflow.WorkflowInstance{
 		ID:         instID,
 		WorkflowID: wf.ID,
-		Status:     StatusActive,
+		Status:     workflow.StatusActive,
 	}
 
 	// Wire context to the repo's persistence layer
@@ -114,26 +115,26 @@ func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initia
 	}
 
 	// Find START node
-	var startNode *Node
+	var startNode *workflow.Node
 	for _, n := range wf.Nodes {
-		if n.Type == NodeTypeInternal && n.InternalType == InternalTypeEvent && n.EventType == StartEvent {
+		if n.Type == workflow.NodeTypeInternal && n.InternalType == workflow.InternalTypeEvent && n.EventType == workflow.StartEvent {
 			startNode = &n
 			break
 		}
 	}
 
 	if startNode == nil {
-		inst.Status = StatusFailed
+		inst.Status = workflow.StatusFailed
 		if err := m.repo.Save(ctx, inst); err != nil {
 			m.logger.Error("failed to save instance status on missing start node", "instanceID", inst.ID, "error", err)
 		}
 		m.finalizeWorkflow(ctx, inst)
-		return "", fmt.Errorf("%w: %s", ErrNoStartEvent, wf.ID)
+		return "", fmt.Errorf("%w: %s", workflow.ErrNoStartEvent, wf.ID)
 	}
 
 	m.logger.Info("starting workflow", "workflowID", wf.ID, "instanceID", instID)
 	if err := m.processTarget(ctx, &wf, inst, startNode.ID); err != nil {
-		inst.Status = StatusFailed
+		inst.Status = workflow.StatusFailed
 		if sErr := m.repo.Save(ctx, inst); sErr != nil {
 			m.logger.Error("failed to save instance status on processTarget error", "instanceID", inst.ID, "error", sErr)
 		}
@@ -142,7 +143,7 @@ func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initia
 	}
 
 	err := m.repo.Save(ctx, inst)
-	if inst.Status != StatusActive {
+	if inst.Status != workflow.StatusActive {
 		m.finalizeWorkflow(ctx, inst)
 	}
 	return instID, err
@@ -152,7 +153,7 @@ func (m *manager) StartWorkflow(ctx context.Context, workflowJSON []byte, initia
 func (m *manager) TaskDone(ctx context.Context, executionID string, outputs map[string]any) error {
 	parts := strings.Split(executionID, ":")
 	if len(parts) < 2 {
-		return fmt.Errorf("%w: %s", ErrInvalidExecutionID, executionID)
+		return fmt.Errorf("%w: %s", workflow.ErrInvalidExecutionID, executionID)
 	}
 	instID := parts[0]
 	nodeID := parts[1]
@@ -185,12 +186,12 @@ func (m *manager) TaskDone(ctx context.Context, executionID string, outputs map[
 	// Resolve the correct version of the blueprint pinned to this instance
 	wf, ok := m.getBlueprint(inst.WorkflowID)
 	if !ok {
-		return fmt.Errorf("%w: %s (instance %s)", ErrWorkflowNotFound, inst.WorkflowID, instID)
+		return fmt.Errorf("%w: %s (instance %s)", workflow.ErrWorkflowNotFound, inst.WorkflowID, instID)
 	}
 
 	node, ok := m.getNode(wf, nodeID)
 	if !ok {
-		return fmt.Errorf("%w: %s in workflow %s", ErrNodeNotFound, nodeID, inst.WorkflowID)
+		return fmt.Errorf("%w: %s in workflow %s", workflow.ErrNodeNotFound, nodeID, inst.WorkflowID)
 	}
 
 	// Output Mapping
@@ -202,7 +203,7 @@ func (m *manager) TaskDone(ctx context.Context, executionID string, outputs map[
 
 	m.removeToken(ctx, inst, executionID)
 	if err := m.transition(ctx, wf, inst, nodeID); err != nil {
-		inst.Status = StatusFailed
+		inst.Status = workflow.StatusFailed
 		if sErr := m.repo.Save(ctx, inst); sErr != nil {
 			m.logger.Error("failed to save instance status on transition error", "instanceID", instID, "error", sErr)
 		}
@@ -211,13 +212,13 @@ func (m *manager) TaskDone(ctx context.Context, executionID string, outputs map[
 	}
 
 	err = m.repo.Save(ctx, inst)
-	if inst.Status != StatusActive {
+	if inst.Status != workflow.StatusActive {
 		m.finalizeWorkflow(ctx, inst)
 	}
 	return err
 }
 
-func (m *manager) finalizeWorkflow(ctx context.Context, inst *WorkflowInstance) {
+func (m *manager) finalizeWorkflow(ctx context.Context, inst *workflow.WorkflowInstance) {
 	if m.completionHandler != nil {
 		if err := m.completionHandler(ctx, inst); err != nil {
 			m.logger.Error("completion handler failed", "instanceID", inst.ID, "error", err)
@@ -225,21 +226,21 @@ func (m *manager) finalizeWorkflow(ctx context.Context, inst *WorkflowInstance) 
 	}
 }
 
-func (m *manager) GetStatus(ctx context.Context, instanceID string) (*WorkflowInstance, error) {
+func (m *manager) GetStatus(ctx context.Context, instanceID string) (*workflow.WorkflowInstance, error) {
 	return m.repo.Get(ctx, instanceID)
 }
 
 // transition moves tokens from a source node to its targets based on gateway logic.
-func (m *manager) transition(ctx context.Context, wf *Workflow, inst *WorkflowInstance, sourceID string) error {
+func (m *manager) transition(ctx context.Context, wf *workflow.Workflow, inst *workflow.WorkflowInstance, sourceID string) error {
 	sourceNode, ok := m.getNode(wf, sourceID)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNodeNotFound, sourceID)
+		return fmt.Errorf("%w: %s", workflow.ErrNodeNotFound, sourceID)
 	}
 	m.logger.Debug("transition", "sourceID", sourceID, "type", sourceNode.Type)
 	edges := m.getOutgoing(wf, sourceID)
 	var targets []string
 
-	if sourceNode.Type == NodeTypeInternal && sourceNode.InternalType == InternalTypeGateway && sourceNode.GatewayType == ExclusiveSplit {
+	if sourceNode.Type == workflow.NodeTypeInternal && sourceNode.InternalType == workflow.InternalTypeGateway && sourceNode.GatewayType == workflow.ExclusiveSplit {
 		for _, edge := range edges {
 			if edge.Condition == nil {
 				targets = append(targets, edge.TargetID)
@@ -255,9 +256,9 @@ func (m *manager) transition(ctx context.Context, wf *Workflow, inst *WorkflowIn
 			}
 		}
 		if len(targets) == 0 {
-			return fmt.Errorf("%w: node %s", ErrNoMatchingCondition, sourceID)
+			return fmt.Errorf("%w: node %s", workflow.ErrNoMatchingCondition, sourceID)
 		}
-	} else if sourceNode.Type == NodeTypeInternal && sourceNode.InternalType == InternalTypeGateway && sourceNode.GatewayType == ParallelSplit {
+	} else if sourceNode.Type == workflow.NodeTypeInternal && sourceNode.InternalType == workflow.InternalTypeGateway && sourceNode.GatewayType == workflow.ParallelSplit {
 		for _, edge := range edges {
 			targets = append(targets, edge.TargetID)
 		}
@@ -277,27 +278,27 @@ func (m *manager) transition(ctx context.Context, wf *Workflow, inst *WorkflowIn
 }
 
 // processTarget determines how to handle a specific node reached during a transition.
-func (m *manager) processTarget(ctx context.Context, wf *Workflow, inst *WorkflowInstance, nodeID string) error {
+func (m *manager) processTarget(ctx context.Context, wf *workflow.Workflow, inst *workflow.WorkflowInstance, nodeID string) error {
 	node, ok := m.getNode(wf, nodeID)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNodeNotFound, nodeID)
+		return fmt.Errorf("%w: %s", workflow.ErrNodeNotFound, nodeID)
 	}
 
 	m.logger.Debug("processTarget", "nodeID", nodeID, "type", node.Type)
 
-	if node.Type == NodeTypeInternal {
+	if node.Type == workflow.NodeTypeInternal {
 		switch node.InternalType {
-		case InternalTypeEvent:
-			if node.EventType == StartEvent {
+		case workflow.InternalTypeEvent:
+			if node.EventType == workflow.StartEvent {
 				return m.transition(ctx, wf, inst, nodeID)
 			}
-			if node.EventType == EndEvent {
-				inst.Status = StatusCompleted
+			if node.EventType == workflow.EndEvent {
+				inst.Status = workflow.StatusCompleted
 				inst.Context.SetTokens(ctx, nil)
 				return nil
 			}
-		case InternalTypeGateway:
-			if node.GatewayType == ParallelJoin {
+		case workflow.InternalTypeGateway:
+			if node.GatewayType == workflow.ParallelJoin {
 				tokens := inst.Context.GetTokens()
 				tokens = append(tokens, state.Token{ID: uuid.NewString(), NodeID: nodeID, Status: state.TokenWaiting})
 				inst.Context.SetTokens(ctx, tokens)
@@ -312,9 +313,9 @@ func (m *manager) processTarget(ctx context.Context, wf *Workflow, inst *Workflo
 		}
 	}
 
-	if node.Type == NodeTypeTask {
+	if node.Type == workflow.NodeTypeTask {
 		if m.handler == nil {
-			return ErrHandlerNotRegistered
+			return workflow.ErrHandlerNotRegistered
 		}
 
 		// Input Mapping
@@ -328,7 +329,7 @@ func (m *manager) processTarget(ctx context.Context, wf *Workflow, inst *Workflo
 		tokens = append(tokens, state.Token{ID: executionID, NodeID: nodeID, Status: state.TokenActive})
 		inst.Context.SetTokens(ctx, tokens)
 
-		payload := TaskPayload{
+		payload := workflow.TaskPayload{
 			ExecutionID: executionID,
 			TaskID:      node.TaskID,
 			Inputs:      inputs,
@@ -340,7 +341,7 @@ func (m *manager) processTarget(ctx context.Context, wf *Workflow, inst *Workflo
 }
 
 // getOutgoing retrieves all edges where the specified node is the source.
-func (m *manager) getOutgoing(wf *Workflow, id string) (res []Edge) {
+func (m *manager) getOutgoing(wf *workflow.Workflow, id string) (res []workflow.Edge) {
 	for _, edge := range wf.Edges {
 		if edge.SourceID == id {
 			res = append(res, edge)
@@ -350,7 +351,7 @@ func (m *manager) getOutgoing(wf *Workflow, id string) (res []Edge) {
 }
 
 // getIncoming retrieves all edges where the specified node is the target.
-func (m *manager) getIncoming(wf *Workflow, id string) (res []Edge) {
+func (m *manager) getIncoming(wf *workflow.Workflow, id string) (res []workflow.Edge) {
 	for _, edge := range wf.Edges {
 		if edge.TargetID == id {
 			res = append(res, edge)
@@ -360,7 +361,7 @@ func (m *manager) getIncoming(wf *Workflow, id string) (res []Edge) {
 }
 
 // getTokensAt returns all active or waiting tokens currently at the specified node.
-func (m *manager) getTokensAt(inst *WorkflowInstance, id string) (res []state.Token) {
+func (m *manager) getTokensAt(inst *workflow.WorkflowInstance, id string) (res []state.Token) {
 	for _, t := range inst.Context.GetTokens() {
 		if t.NodeID == id {
 			res = append(res, t)
@@ -370,7 +371,7 @@ func (m *manager) getTokensAt(inst *WorkflowInstance, id string) (res []state.To
 }
 
 // removeToken deletes a specific token by its unique ExecutionID.
-func (m *manager) removeToken(ctx context.Context, inst *WorkflowInstance, executionID string) {
+func (m *manager) removeToken(ctx context.Context, inst *workflow.WorkflowInstance, executionID string) {
 	var next []state.Token
 	for _, t := range inst.Context.GetTokens() {
 		if t.ID != executionID {
@@ -381,7 +382,7 @@ func (m *manager) removeToken(ctx context.Context, inst *WorkflowInstance, execu
 }
 
 // removeTokensAt deletes all tokens from the instance that are currently at the specified node.
-func (m *manager) removeTokensAt(ctx context.Context, inst *WorkflowInstance, nodeID string) {
+func (m *manager) removeTokensAt(ctx context.Context, inst *workflow.WorkflowInstance, nodeID string) {
 	var next []state.Token
 	for _, t := range inst.Context.GetTokens() {
 		if t.NodeID != nodeID {

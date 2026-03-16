@@ -1,9 +1,10 @@
-package workflow
+package repository
 
 import (
 	"context"
 	"testing"
 
+	"github.com/lokewate/go-workflow"
 	"github.com/lokewate/go-workflow/state"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +15,7 @@ func TestMemoryRepo(t *testing.T) {
 	repo := NewMemoryRepo()
 
 	t.Run("Save and Get Instance", func(t *testing.T) {
-		inst := &WorkflowInstance{ID: "inst-1"}
+		inst := &workflow.WorkflowInstance{ID: "inst-1"}
 		err := repo.Save(ctx, inst)
 		assert.NoError(t, err)
 
@@ -37,7 +38,7 @@ func TestMemoryRepo(t *testing.T) {
 
 	t.Run("Get Non-existent Instance", func(t *testing.T) {
 		retrieved, err := repo.Get(ctx, "missing")
-		assert.ErrorIs(t, err, ErrInstanceNotFound)
+		assert.ErrorIs(t, err, workflow.ErrInstanceNotFound)
 		assert.Nil(t, retrieved)
 	})
 }

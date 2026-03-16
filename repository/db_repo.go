@@ -1,10 +1,11 @@
-package workflow
+package repository
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/lokewate/go-workflow"
 	"github.com/lokewate/go-workflow/state"
 	"gorm.io/gorm"
 )
@@ -47,19 +48,19 @@ func (r *DBRepo) NewContext(instID string) state.GlobalContext {
 }
 
 // Get retrieves a workflow instance by ID.
-func (r *DBRepo) Get(ctx context.Context, id string) (*WorkflowInstance, error) {
+func (r *DBRepo) Get(ctx context.Context, id string) (*workflow.WorkflowInstance, error) {
 	var gormInst GormWorkflowInstance
 	if err := r.db.WithContext(ctx).First(&gormInst, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, ErrInstanceNotFound
+			return nil, workflow.ErrInstanceNotFound
 		}
 		return nil, err
 	}
 
-	inst := &WorkflowInstance{
+	inst := &workflow.WorkflowInstance{
 		ID:         gormInst.ID,
 		WorkflowID: gormInst.WorkflowID,
-		Status:     WorkflowStatus(gormInst.Status),
+		Status:     workflow.WorkflowStatus(gormInst.Status),
 	}
 
 	// Wire context to the repo's persistence
@@ -76,7 +77,7 @@ func (r *DBRepo) Get(ctx context.Context, id string) (*WorkflowInstance, error) 
 }
 
 // Save persists a workflow instance metadata.
-func (r *DBRepo) Save(ctx context.Context, inst *WorkflowInstance) error {
+func (r *DBRepo) Save(ctx context.Context, inst *workflow.WorkflowInstance) error {
 	gormInst := GormWorkflowInstance{
 		ID:         inst.ID,
 		WorkflowID: inst.WorkflowID,

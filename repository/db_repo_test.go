@@ -1,9 +1,10 @@
-package workflow
+package repository
 
 import (
 	"context"
 	"testing"
 
+	"github.com/lokewate/go-workflow"
 	"github.com/lokewate/go-workflow/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,10 +20,10 @@ func TestDBRepo(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	inst := &WorkflowInstance{
+	inst := &workflow.WorkflowInstance{
 		ID:         "inst-1",
 		WorkflowID: "wf-1",
-		Status:     StatusActive,
+		Status:     workflow.StatusActive,
 	}
 
 	t.Run("Save and Get Instance", func(t *testing.T) {
@@ -53,6 +54,6 @@ func TestDBRepo(t *testing.T) {
 
 	t.Run("Instance Not Found", func(t *testing.T) {
 		_, err := repo.Get(ctx, "non-existent")
-		assert.ErrorIs(t, err, ErrInstanceNotFound)
+		assert.ErrorIs(t, err, workflow.ErrInstanceNotFound)
 	})
 }

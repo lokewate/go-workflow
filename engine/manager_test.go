@@ -1,4 +1,4 @@
-package workflow
+package engine
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lokewate/go-workflow"
+	"github.com/lokewate/go-workflow/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,20 +17,20 @@ import (
 // --- Helpers ---
 
 // simpleLinearWorkflow: START -> task_a -> END
-func simpleLinearWorkflow() *Workflow {
-	return &Workflow{
+func simpleLinearWorkflow() *workflow.Workflow {
+	return &workflow.Workflow{
 		ID:      "linear",
 		Name:    "Simple Linear",
 		Version: 1,
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "do_a",
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "do_a",
 				InputMapping:  map[string]string{"local_in": "global_input"},
 				OutputMapping: map[string]string{"local_out": "global_output"},
 			},
-			{ID: "end", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: EndEvent},
+			{ID: "end", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.EndEvent},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "task_a"},
 			{ID: "e2", SourceID: "task_a", TargetID: "end"},
 		},
@@ -36,25 +38,25 @@ func simpleLinearWorkflow() *Workflow {
 }
 
 // exclusiveSplitWorkflow: START -> task_init -> EXCLUSIVE_SPLIT -> (ok: task_yes | !ok: task_no) -> END
-func exclusiveSplitWorkflow() *Workflow {
+func exclusiveSplitWorkflow() *workflow.Workflow {
 	condOK := "ok == true"
 	condNotOK := "ok == false"
-	return &Workflow{
+	return &workflow.Workflow{
 		ID:      "exclusive",
 		Name:    "Exclusive Split",
 		Version: 1,
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "task_init", Type: NodeTypeTask, TaskID: "init",
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "task_init", Type: workflow.NodeTypeTask, TaskID: "init",
 				OutputMapping: map[string]string{"ok": "ok"},
 			},
-			{ID: "split", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ExclusiveSplit},
-			{ID: "task_yes", Type: NodeTypeTask, TaskID: "yes_task"},
-			{ID: "task_no", Type: NodeTypeTask, TaskID: "no_task"},
-			{ID: "join", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ExclusiveJoin},
-			{ID: "end", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: EndEvent},
+			{ID: "split", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ExclusiveSplit},
+			{ID: "task_yes", Type: workflow.NodeTypeTask, TaskID: "yes_task"},
+			{ID: "task_no", Type: workflow.NodeTypeTask, TaskID: "no_task"},
+			{ID: "join", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ExclusiveJoin},
+			{ID: "end", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.EndEvent},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "task_init"},
 			{ID: "e2", SourceID: "task_init", TargetID: "split"},
 			{ID: "e3", SourceID: "split", TargetID: "task_yes", Condition: &condOK},
@@ -67,20 +69,20 @@ func exclusiveSplitWorkflow() *Workflow {
 }
 
 // parallelWorkflow: START -> PARALLEL_SPLIT -> (task_a, task_b) -> PARALLEL_JOIN -> END
-func parallelWorkflow() *Workflow {
-	return &Workflow{
+func parallelWorkflow() *workflow.Workflow {
+	return &workflow.Workflow{
 		ID:      "parallel",
 		Name:    "Parallel Flow",
 		Version: 1,
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "p_split", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ParallelSplit},
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "work_a"},
-			{ID: "task_b", Type: NodeTypeTask, TaskID: "work_b"},
-			{ID: "p_join", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ParallelJoin},
-			{ID: "end", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: EndEvent},
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "p_split", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ParallelSplit},
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "work_a"},
+			{ID: "task_b", Type: workflow.NodeTypeTask, TaskID: "work_b"},
+			{ID: "p_join", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ParallelJoin},
+			{ID: "end", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.EndEvent},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "p_split"},
 			{ID: "e2", SourceID: "p_split", TargetID: "task_a"},
 			{ID: "e3", SourceID: "p_split", TargetID: "task_b"},
@@ -92,15 +94,15 @@ func parallelWorkflow() *Workflow {
 }
 
 // newTestManager creates a manager with a handler that captures activations.
-func newTestManager() (Manager, *activationTracker) {
-	repo := NewMemoryRepo()
+func newTestManager() (workflow.Manager, *activationTracker) {
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	tracker := &activationTracker{
-		payloads: make(map[string][]TaskPayload),
+		payloads: make(map[string][]workflow.TaskPayload),
 	}
 
-	mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+	mgr.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
 		tracker.mu.Lock()
 		defer tracker.mu.Unlock()
 		tracker.payloads[payload.NodeID()] = append(tracker.payloads[payload.NodeID()], payload)
@@ -110,7 +112,7 @@ func newTestManager() (Manager, *activationTracker) {
 	return mgr, tracker
 }
 
-func wfJSON(t *testing.T, wf *Workflow) []byte {
+func wfJSON(t *testing.T, wf *workflow.Workflow) []byte {
 	b, err := json.Marshal(wf)
 	require.NoError(t, err)
 	return b
@@ -118,7 +120,7 @@ func wfJSON(t *testing.T, wf *Workflow) []byte {
 
 type activationTracker struct {
 	mu       sync.Mutex
-	payloads map[string][]TaskPayload // NodeID -> []TaskPayload
+	payloads map[string][]workflow.TaskPayload // NodeID -> []workflow.TaskPayload
 }
 
 func (t *activationTracker) getExecID(nodeID string, index int) string {
@@ -131,7 +133,7 @@ func (t *activationTracker) getExecID(nodeID string, index int) string {
 	return ""
 }
 
-func (t *activationTracker) getPayload(nodeID string, index int) TaskPayload {
+func (t *activationTracker) getPayload(nodeID string, index int) workflow.TaskPayload {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.payloads[nodeID][index]
@@ -142,7 +144,7 @@ func (t *activationTracker) getPayload(nodeID string, index int) TaskPayload {
 // ============================================================
 
 func TestStartWorkflow_ErrInvalidJSON(t *testing.T) {
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	_, err := mgr.StartWorkflow(context.Background(), []byte("invalid-json"), nil)
@@ -150,34 +152,34 @@ func TestStartWorkflow_ErrInvalidJSON(t *testing.T) {
 }
 
 func TestStartWorkflow_ErrNoStartEvent(t *testing.T) {
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	// Workflow with no START event
-	wf := &Workflow{
+	wf := &workflow.Workflow{
 		ID:   "no_start",
 		Name: "Missing Start",
-		Nodes: []Node{
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "a"},
-			{ID: "end", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: EndEvent},
+		Nodes: []workflow.Node{
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "a"},
+			{ID: "end", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.EndEvent},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "task_a", TargetID: "end"},
 		},
 	}
 	_, err := mgr.StartWorkflow(context.Background(), wfJSON(t, wf), nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrNoStartEvent))
+	assert.True(t, errors.Is(err, workflow.ErrNoStartEvent))
 }
 
 func TestStartWorkflow_ErrHandlerNotRegistered(t *testing.T) {
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	// Don't register a handler — StartWorkflow should fail when it hits the task node
 	_, err := mgr.StartWorkflow(context.Background(), wfJSON(t, simpleLinearWorkflow()), nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrHandlerNotRegistered))
+	assert.True(t, errors.Is(err, workflow.ErrHandlerNotRegistered))
 }
 
 func TestTaskDone_ErrInvalidExecutionID(t *testing.T) {
@@ -185,7 +187,7 @@ func TestTaskDone_ErrInvalidExecutionID(t *testing.T) {
 
 	err := mgr.TaskDone(context.Background(), "bad-format-no-colon", nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrInvalidExecutionID))
+	assert.True(t, errors.Is(err, workflow.ErrInvalidExecutionID))
 }
 
 func TestTaskDone_ErrInstanceNotFound(t *testing.T) {
@@ -193,7 +195,7 @@ func TestTaskDone_ErrInstanceNotFound(t *testing.T) {
 
 	err := mgr.TaskDone(context.Background(), "nonexistent-instance:some-node:some-uuid", nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrInstanceNotFound))
+	assert.True(t, errors.Is(err, workflow.ErrInstanceNotFound))
 }
 
 func TestGetStatus_ErrInstanceNotFound(t *testing.T) {
@@ -202,7 +204,7 @@ func TestGetStatus_ErrInstanceNotFound(t *testing.T) {
 	inst, err := mgr.GetStatus(context.Background(), "does-not-exist")
 	require.Error(t, err)
 	assert.Nil(t, inst)
-	assert.True(t, errors.Is(err, ErrInstanceNotFound))
+	assert.True(t, errors.Is(err, workflow.ErrInstanceNotFound))
 }
 
 func TestExclusiveSplit_ErrNoMatchingCondition(t *testing.T) {
@@ -211,19 +213,19 @@ func TestExclusiveSplit_ErrNoMatchingCondition(t *testing.T) {
 	// Create a workflow where the exclusive split conditions won't match
 	condA := "status == 'approved'"
 	condB := "status == 'rejected'"
-	wf := &Workflow{
+	wf := &workflow.Workflow{
 		ID:   "no_match",
 		Name: "No Match",
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "task_init", Type: NodeTypeTask, TaskID: "init",
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "task_init", Type: workflow.NodeTypeTask, TaskID: "init",
 				OutputMapping: map[string]string{"status": "status"},
 			},
-			{ID: "split", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ExclusiveSplit},
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "a"},
-			{ID: "task_b", Type: NodeTypeTask, TaskID: "b"},
+			{ID: "split", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ExclusiveSplit},
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "a"},
+			{ID: "task_b", Type: workflow.NodeTypeTask, TaskID: "b"},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "task_init"},
 			{ID: "e2", SourceID: "task_init", TargetID: "split"},
 			{ID: "e3", SourceID: "split", TargetID: "task_a", Condition: &condA},
@@ -239,12 +241,12 @@ func TestExclusiveSplit_ErrNoMatchingCondition(t *testing.T) {
 	execID := tracker.getExecID("task_init", 0)
 	err = mgr.TaskDone(ctx, execID, map[string]any{"status": "pending"})
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrNoMatchingCondition))
+	assert.True(t, errors.Is(err, workflow.ErrNoMatchingCondition))
 
 	// Verify instance is marked as FAILED
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusFailed, inst.Status)
+	assert.Equal(t, workflow.StatusFailed, inst.Status)
 }
 
 // ============================================================
@@ -273,11 +275,11 @@ func TestIdempotency_DuplicateTaskDone(t *testing.T) {
 func TestInputMapping(t *testing.T) {
 	ctx := context.Background()
 	wf := simpleLinearWorkflow()
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
-	var capturedPayload TaskPayload
-	mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+	var capturedPayload workflow.TaskPayload
+	mgr.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
 		capturedPayload = payload
 		return nil
 	})
@@ -313,7 +315,7 @@ func TestOutputMapping(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "task_result_value", inst.Context.Get("global_output"),
 		"Output mapping should map local_out -> global_output")
-	assert.Equal(t, StatusCompleted, inst.Status)
+	assert.Equal(t, workflow.StatusCompleted, inst.Status)
 }
 
 func TestOutputMapping_IgnoresUnmappedKeys(t *testing.T) {
@@ -371,7 +373,7 @@ func TestConcurrentTaskDone_SameInstance(t *testing.T) {
 
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status,
+	assert.Equal(t, workflow.StatusCompleted, inst.Status,
 		"Workflow should complete after both parallel tasks finish")
 	assert.Empty(t, inst.Context.GetTokens(),
 		"No tokens should remain after completion")
@@ -380,13 +382,13 @@ func TestConcurrentTaskDone_SameInstance(t *testing.T) {
 func TestConcurrentTaskDone_DifferentInstances(t *testing.T) {
 	ctx := context.Background()
 	wf := simpleLinearWorkflow()
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	var mu sync.Mutex
 	activations := make(map[string]string) // instanceID -> executionID (since each only has one task)
 
-	mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+	mgr.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
 		mu.Lock()
 		defer mu.Unlock()
 		// Store by the instance portion of the executionID
@@ -438,7 +440,7 @@ func TestConcurrentTaskDone_DifferentInstances(t *testing.T) {
 	for _, id := range instIDs {
 		inst, err := mgr.GetStatus(ctx, id)
 		require.NoError(t, err)
-		assert.Equal(t, StatusCompleted, inst.Status,
+		assert.Equal(t, workflow.StatusCompleted, inst.Status,
 			"Instance %s should be completed", id)
 	}
 }
@@ -464,7 +466,7 @@ func TestStartWorkflow_NilInitialContext(t *testing.T) {
 
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status)
+	assert.Equal(t, workflow.StatusCompleted, inst.Status)
 }
 
 func TestTaskDone_EmptyOutputs(t *testing.T) {
@@ -480,7 +482,7 @@ func TestTaskDone_EmptyOutputs(t *testing.T) {
 
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status,
+	assert.Equal(t, workflow.StatusCompleted, inst.Status,
 		"Workflow should complete even with nil outputs")
 	assert.Nil(t, inst.Context.Get("global_output"),
 		"Output should not be set when outputs map is nil")
@@ -499,7 +501,7 @@ func TestTaskDone_EmptyOutputsMap(t *testing.T) {
 
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status)
+	assert.Equal(t, workflow.StatusCompleted, inst.Status)
 }
 
 func TestExclusiveSplit_DefaultEdge(t *testing.T) {
@@ -507,17 +509,17 @@ func TestExclusiveSplit_DefaultEdge(t *testing.T) {
 
 	// Workflow where one edge has no condition (acts as default)
 	condA := "status == 'approved'"
-	wf := &Workflow{
+	wf := &workflow.Workflow{
 		ID:   "default_edge",
 		Name: "Default Edge",
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "split", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ExclusiveSplit},
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "approved_task"},
-			{ID: "task_default", Type: NodeTypeTask, TaskID: "default_task"},
-			{ID: "end", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: EndEvent},
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "split", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ExclusiveSplit},
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "approved_task"},
+			{ID: "task_default", Type: workflow.NodeTypeTask, TaskID: "default_task"},
+			{ID: "end", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.EndEvent},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "split"},
 			{ID: "e2", SourceID: "split", TargetID: "task_a", Condition: &condA},
 			{ID: "e3", SourceID: "split", TargetID: "task_default"}, // No condition = default
@@ -544,12 +546,12 @@ func TestExclusiveSplit_DefaultEdge(t *testing.T) {
 
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status)
+	assert.Equal(t, workflow.StatusCompleted, inst.Status)
 }
 
 func TestMultipleBlueprints(t *testing.T) {
 	ctx := context.Background()
-	repo := NewMemoryRepo()
+	repo := repository.NewMemoryRepo()
 	mgr := NewWorkflowManager(repo)
 
 	wfA := simpleLinearWorkflow()
@@ -558,7 +560,7 @@ func TestMultipleBlueprints(t *testing.T) {
 	var mu sync.Mutex
 	taskIDs := make(map[string]int) // TaskID -> count
 
-	mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+	mgr.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
 		mu.Lock()
 		defer mu.Unlock()
 		taskIDs[payload.TaskID]++
@@ -588,19 +590,19 @@ func TestStatusFailed_PersistedToRepo(t *testing.T) {
 	// Create workflow that will always fail at the split (no default, no matching condition)
 	condA := "x == 1"
 	condB := "x == 2"
-	wf := &Workflow{
+	wf := &workflow.Workflow{
 		ID:   "will_fail",
 		Name: "Will Fail",
-		Nodes: []Node{
-			{ID: "start", Type: NodeTypeInternal, InternalType: InternalTypeEvent, EventType: StartEvent},
-			{ID: "task_init", Type: NodeTypeTask, TaskID: "init",
+		Nodes: []workflow.Node{
+			{ID: "start", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeEvent, EventType: workflow.StartEvent},
+			{ID: "task_init", Type: workflow.NodeTypeTask, TaskID: "init",
 				OutputMapping: map[string]string{"x": "x"},
 			},
-			{ID: "split", Type: NodeTypeInternal, InternalType: InternalTypeGateway, GatewayType: ExclusiveSplit},
-			{ID: "task_a", Type: NodeTypeTask, TaskID: "a"},
-			{ID: "task_b", Type: NodeTypeTask, TaskID: "b"},
+			{ID: "split", Type: workflow.NodeTypeInternal, InternalType: workflow.InternalTypeGateway, GatewayType: workflow.ExclusiveSplit},
+			{ID: "task_a", Type: workflow.NodeTypeTask, TaskID: "a"},
+			{ID: "task_b", Type: workflow.NodeTypeTask, TaskID: "b"},
 		},
-		Edges: []Edge{
+		Edges: []workflow.Edge{
 			{ID: "e1", SourceID: "start", TargetID: "task_init"},
 			{ID: "e2", SourceID: "task_init", TargetID: "split"},
 			{ID: "e3", SourceID: "split", TargetID: "task_a", Condition: &condA},
@@ -619,7 +621,7 @@ func TestStatusFailed_PersistedToRepo(t *testing.T) {
 	// Verify FAILED status is persisted and retrievable
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusFailed, inst.Status,
+	assert.Equal(t, workflow.StatusFailed, inst.Status,
 		"Instance should be persisted as FAILED after transition error")
 }
 
@@ -637,7 +639,7 @@ func TestTaskPayload_NodeID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := TaskPayload{ExecutionID: tt.execID}
+			p := workflow.TaskPayload{ExecutionID: tt.execID}
 			assert.Equal(t, tt.expected, p.NodeID())
 		})
 	}
@@ -656,7 +658,7 @@ func TestLinearWorkflow_FullLifecycle(t *testing.T) {
 	// Verify ACTIVE status
 	inst, err := mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusActive, inst.Status)
+	assert.Equal(t, workflow.StatusActive, inst.Status)
 	assert.Len(t, inst.Context.GetTokens(), 1, "Should have one token at task_a")
 
 	// Verify input was correctly mapped
@@ -673,7 +675,7 @@ func TestLinearWorkflow_FullLifecycle(t *testing.T) {
 	// Verify COMPLETED
 	inst, err = mgr.GetStatus(ctx, instID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusCompleted, inst.Status)
+	assert.Equal(t, workflow.StatusCompleted, inst.Status)
 	assert.Empty(t, inst.Context.GetTokens())
 	assert.Equal(t, "output_value", inst.Context.Get("global_output"))
 }
@@ -683,9 +685,9 @@ func TestWorkflowCompletionHandler(t *testing.T) {
 	mgr, tracker := newTestManager()
 
 	var completed atomic.Bool
-	var finalStatus WorkflowStatus
+	var finalStatus workflow.WorkflowStatus
 
-	mgr.RegisterWorkflowCompletionHandler(func(ctx context.Context, inst *WorkflowInstance) error {
+	mgr.RegisterWorkflowCompletionHandler(func(ctx context.Context, inst *workflow.WorkflowInstance) error {
 		completed.Store(true)
 		finalStatus = inst.Status
 		return nil
@@ -701,15 +703,15 @@ func TestWorkflowCompletionHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, completed.Load())
-	assert.Equal(t, StatusCompleted, finalStatus)
+	assert.Equal(t, workflow.StatusCompleted, finalStatus)
 
 	// 2. Failure Case
 	completed.Store(false)
 	// Create workflow that fails (no start event is easiest to fail during StartWorkflow)
-	wfFail := &Workflow{ID: "fail", Nodes: []Node{{ID: "task", Type: NodeTypeTask}}} // No start event
+	wfFail := &workflow.Workflow{ID: "fail", Nodes: []workflow.Node{{ID: "task", Type: workflow.NodeTypeTask}}} // No start event
 	_, err = mgr.StartWorkflow(ctx, wfJSON(t, wfFail), nil)
 	require.Error(t, err)
 
 	assert.True(t, completed.Load())
-	assert.Equal(t, StatusFailed, finalStatus)
+	assert.Equal(t, workflow.StatusFailed, finalStatus)
 }

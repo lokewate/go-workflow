@@ -1,9 +1,10 @@
-package workflow
+package repository
 
 import (
 	"context"
 	"sync"
 
+	"github.com/lokewate/go-workflow"
 	"github.com/lokewate/go-workflow/state"
 )
 
@@ -11,7 +12,7 @@ import (
 type MemoryRepo struct {
 	mu sync.RWMutex
 	// instances maps instance IDs to their workflow instance objects.
-	instances map[string]*WorkflowInstance
+	instances map[string]*workflow.WorkflowInstance
 	// data stores workflow-wide variables, indexed by instance ID.
 	data map[string]map[string]any
 	// tokens tracks current execution markers for each instance.
@@ -21,7 +22,7 @@ type MemoryRepo struct {
 // NewMemoryRepo initializes a new MemoryRepo.
 func NewMemoryRepo() *MemoryRepo {
 	return &MemoryRepo{
-		instances: make(map[string]*WorkflowInstance),
+		instances: make(map[string]*workflow.WorkflowInstance),
 		data:      make(map[string]map[string]any),
 		tokens:    make(map[string][]state.Token),
 	}
@@ -37,13 +38,13 @@ func (r *MemoryRepo) NewContext(instID string) state.GlobalContext {
 }
 
 // Get retrieves a workflow instance by its ID.
-func (r *MemoryRepo) Get(ctx context.Context, id string) (*WorkflowInstance, error) {
+func (r *MemoryRepo) Get(ctx context.Context, id string) (*workflow.WorkflowInstance, error) {
 	r.mu.RLock()
 	inst, ok := r.instances[id]
 	r.mu.RUnlock()
 
 	if !ok {
-		return nil, ErrInstanceNotFound
+		return nil, workflow.ErrInstanceNotFound
 	}
 
 	// Wire context to the repo's persistence
@@ -59,7 +60,7 @@ func (r *MemoryRepo) Get(ctx context.Context, id string) (*WorkflowInstance, err
 }
 
 // Save persists a workflow instance.
-func (r *MemoryRepo) Save(_ context.Context, inst *WorkflowInstance) error {
+func (r *MemoryRepo) Save(_ context.Context, inst *workflow.WorkflowInstance) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instances[inst.ID] = inst

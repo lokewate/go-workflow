@@ -1,4 +1,4 @@
-package workflow
+package workflow_test
 
 import (
 	"context"
@@ -7,11 +7,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lokewate/go-workflow"
+	"github.com/lokewate/go-workflow/engine"
+	"github.com/lokewate/go-workflow/repository"
 	"github.com/stretchr/testify/assert"
 )
 
 type TestFile struct {
-	Workflow  Workflow       `json:"workflow"`
+	Workflow  workflow.Workflow       `json:"workflow"`
 	Scenarios []TestScenario `json:"scenarios"`
 }
 
@@ -19,7 +22,7 @@ type TestScenario struct {
 	Name           string         `json:"name"`
 	Steps          []TestStep     `json:"steps"`
 	ExpectedTokens []string       `json:"expected_tokens"`
-	ExpectedStatus WorkflowStatus `json:"expected_status"`
+	ExpectedStatus workflow.WorkflowStatus `json:"expected_status"`
 }
 
 type TestStep struct {
@@ -38,8 +41,8 @@ func TestWorkflows(t *testing.T) {
 	for _, scenario := range testFile.Scenarios {
 		t.Run(scenario.Name, func(t *testing.T) {
 			ctx := context.Background()
-			repo := NewMemoryRepo()
-			mgr := NewWorkflowManager(repo)
+			repo := repository.NewMemoryRepo()
+			mgr := engine.NewWorkflowManager(repo)
 
 			wfBytes, err := json.Marshal(&testFile.Workflow)
 			assert.NoError(t, err)
@@ -48,7 +51,7 @@ func TestWorkflows(t *testing.T) {
 			var mu sync.Mutex
 			activations := make(map[string][]string) // NodeID -> []ExecutionID
 
-			mgr.RegisterTaskHandler(func(ctx context.Context, payload TaskPayload) error {
+			mgr.RegisterTaskHandler(func(ctx context.Context, payload workflow.TaskPayload) error {
 				mu.Lock()
 				defer mu.Unlock()
 				activations[payload.NodeID()] = append(activations[payload.NodeID()], payload.ExecutionID)
@@ -89,7 +92,7 @@ func TestWorkflows(t *testing.T) {
 			// Check expected status
 			assert.Equal(t, scenario.ExpectedStatus, finalInst.Status, "Workflow status does not match")
 
-			if finalInst.Status == StatusCompleted {
+			if finalInst.Status == workflow.StatusCompleted {
 				assert.Empty(t, finalInst.Context.GetTokens(), "Tokens should be empty after completion")
 			} else {
 				var actualTokenNodes []string
